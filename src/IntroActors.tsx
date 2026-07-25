@@ -138,7 +138,9 @@ export function IntroActors() {
     if (level.isBoss) {
       // Boss intro: just Don Vitale, dropping in from the dock above. No henchman
       // flanking — the final confrontation is Reginald vs. Vitale, one on one.
-      defs.push({ key: 'vitaleScubaStand', speaker: 'boss', from: 'top', offset: [0, 2.2, 0.6], flipX: false, scale: 2.6 })
+      // Settles in clear open water in FRONT of the dock (high z) so the rig never
+      // crops him, and low enough that his full body stays on-screen.
+      defs.push({ key: 'vitaleScubaStand', speaker: 'boss', from: 'top', offset: [0, 1.3, 2], flipX: false, scale: 2.4 })
       return defs
     }
     if (SPRITES[level.hench]) {

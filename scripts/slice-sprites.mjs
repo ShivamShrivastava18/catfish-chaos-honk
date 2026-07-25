@@ -200,6 +200,56 @@ function frySvg() {
 </svg>`;
 }
 
+// A leaking chemical drum: green barrel, rust bands, a hazard label, toxic drips.
+function drumSvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="96" viewBox="0 0 72 96" shape-rendering="crispEdges">
+  <ellipse cx="36" cy="14" rx="26" ry="8" fill="#3f6a3a"/>
+  <rect x="10" y="14" width="52" height="70" fill="#4c7a44"/>
+  <ellipse cx="36" cy="84" rx="26" ry="8" fill="#3a5f35"/>
+  <rect x="10" y="26" width="52" height="6" fill="#2f4d2c"/>
+  <rect x="10" y="66" width="52" height="6" fill="#2f4d2c"/>
+  <rect x="12" y="14" width="4" height="70" fill="#6b9a5f" opacity="0.5"/>
+  <rect x="24" y="40" width="24" height="20" fill="#e8c33a"/>
+  <polygon points="36,42 46,58 26,58" fill="#e8c33a" stroke="#1b1b1b" stroke-width="1.5"/>
+  <rect x="35" y="47" width="2" height="6" fill="#1b1b1b"/>
+  <rect x="35" y="55" width="2" height="2" fill="#1b1b1b"/>
+  <ellipse cx="20" cy="90" rx="4" ry="5" fill="#8fd14a" opacity="0.85"/>
+  <ellipse cx="50" cy="92" rx="3" ry="4" fill="#8fd14a" opacity="0.8"/>
+</svg>`;
+}
+
+// An outflow valve: a grimy pipe stub topped with a red spoked hand-wheel.
+function valveSvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="72" viewBox="0 0 64 72" shape-rendering="crispEdges">
+  <rect x="24" y="40" width="16" height="28" fill="#4a4f55"/>
+  <rect x="20" y="60" width="24" height="8" fill="#3a3f45"/>
+  <rect x="28" y="30" width="8" height="14" fill="#5a5f66"/>
+  <circle cx="32" cy="24" r="20" fill="none" stroke="#c0392b" stroke-width="6"/>
+  <g stroke="#c0392b" stroke-width="5">
+    <line x1="32" y1="6" x2="32" y2="42"/>
+    <line x1="14" y1="24" x2="50" y2="24"/>
+    <line x1="19" y1="11" x2="45" y2="37"/>
+    <line x1="45" y1="11" x2="19" y2="37"/>
+  </g>
+  <circle cx="32" cy="24" r="5" fill="#7a241b"/>
+</svg>`;
+}
+
+// A clump of toxic sludge choking the flow: lumpy dark muck with a few gas bubbles.
+function sludgeSvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="56" viewBox="0 0 80 56" shape-rendering="crispEdges">
+  <ellipse cx="40" cy="42" rx="38" ry="13" fill="#3d3a1e"/>
+  <ellipse cx="26" cy="30" rx="16" ry="14" fill="#4a4726"/>
+  <ellipse cx="48" cy="28" rx="18" ry="16" fill="#514d29"/>
+  <ellipse cx="60" cy="36" rx="12" ry="10" fill="#45421f"/>
+  <g fill="#6f7a2e"><ellipse cx="30" cy="26" rx="3" ry="3"/><ellipse cx="46" cy="22" rx="4" ry="4"/><ellipse cx="56" cy="32" rx="3" ry="3"/></g>
+  <g fill="#9fb04a" opacity="0.8"><circle cx="34" cy="16" r="2"/><circle cx="50" cy="12" r="2.5"/><circle cx="60" cy="20" r="2"/></g>
+</svg>`;
+}
+
 // ============================================================================
 // v4 — SCUBA cleanup helpers + procedural pixel-art environment / UI assets.
 // ============================================================================
@@ -641,6 +691,9 @@ async function main() {
   await genSvg('net', netSvg());
   await genSvg('nursery', nurserySvg());
   await genSvg('fry', frySvg());
+  await genSvg('drum', drumSvg());
+  await genSvg('valve', valveSvg());
+  await genSvg('sludge', sludgeSvg());
 
   console.log('ENV DECOR (v4 — procedural pixel art):');
   await savePx(genKelp(31, 84), 'kelpA', 4);

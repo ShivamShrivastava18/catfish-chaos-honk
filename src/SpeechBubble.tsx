@@ -7,7 +7,12 @@ import { useGame } from './store'
  * out when the line clears. Non-interactive (pointerEvents: none).
  */
 export function SpeechBubble() {
-  const currentLine = useGame((s) => s.currentLine)
+  const gamePhase = useGame((s) => s.gamePhase)
+  const line = useGame((s) => s.currentLine)
+  // During intro/outro the Cutscene's DialogueBox already shows the line at the
+  // bottom — suppress this top bubble then so there aren't two captions. It only
+  // handles in-play barks / HONK.
+  const currentLine = gamePhase === 'playing' ? line : null
   const [displayLine, setDisplayLine] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
 

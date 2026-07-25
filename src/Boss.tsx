@@ -192,30 +192,42 @@ export function Boss() {
     player.current.set(pp[0], pp[1], pp[2])
 
     // --- Vitale keeps swimming in every phase (idle wander when not fighting) ---
+    // Defeated once all three hits have landed (objectiveIndex reaches 3).
+    const defeated = state.objectiveIndex >= 3
+
     const grp = bossGroup.current
     if (grp) {
       grp.visible = state.gamePhase === 'playing' || state.gamePhase === 'outro'
-      // Wander toward the current waypoint.
-      const toWp = bossWaypoint.current.clone().sub(bossBase.current)
-      const dist = toWp.length()
-      if (dist < BOSS_ARRIVE) {
-        pickWaypoint()
+      if (defeated) {
+        // Beaten: stop swimming. Go limp and sink slowly while the outro plays.
+        bossVel.current.set(0, 0, 0)
+        bossBase.current.y -= 0.9 * delta
+        bossPos.current.set(bossBase.current.x, bossBase.current.y, 0)
+        grp.position.copy(bossPos.current)
+        grp.rotation.z = MathUtils.lerp(grp.rotation.z, -0.5, 1 - Math.exp(-3 * delta))
       } else {
-        toWp.multiplyScalar(1 / dist)
-        const step = BOSS_SPEED * delta
-        bossBase.current.addScaledVector(toWp, step)
-        bossVel.current.copy(toWp).multiplyScalar(BOSS_SPEED)
-      }
-      // Live position = wander base + gentle vertical bob.
-      bossPos.current.set(bossBase.current.x, bossBase.current.y + Math.sin(now * 2) * 0.18, 0)
-      grp.position.copy(bossPos.current)
-      // Face travel direction (hysteresis so it doesn't flicker).
-      if (bossVel.current.x > 0.3 && !bossFacingRight.current) {
-        bossFacingRight.current = true
-        setBossFlip(true)
-      } else if (bossVel.current.x < -0.3 && bossFacingRight.current) {
-        bossFacingRight.current = false
-        setBossFlip(false)
+        // Wander toward the current waypoint.
+        const toWp = bossWaypoint.current.clone().sub(bossBase.current)
+        const dist = toWp.length()
+        if (dist < BOSS_ARRIVE) {
+          pickWaypoint()
+        } else {
+          toWp.multiplyScalar(1 / dist)
+          const step = BOSS_SPEED * delta
+          bossBase.current.addScaledVector(toWp, step)
+          bossVel.current.copy(toWp).multiplyScalar(BOSS_SPEED)
+        }
+        // Live position = wander base + gentle vertical bob.
+        bossPos.current.set(bossBase.current.x, bossBase.current.y + Math.sin(now * 2) * 0.18, 0)
+        grp.position.copy(bossPos.current)
+        // Face travel direction (hysteresis so it doesn't flicker).
+        if (bossVel.current.x > 0.3 && !bossFacingRight.current) {
+          bossFacingRight.current = true
+          setBossFlip(true)
+        } else if (bossVel.current.x < -0.3 && bossFacingRight.current) {
+          bossFacingRight.current = false
+          setBossFlip(false)
+        }
       }
     }
 

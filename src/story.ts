@@ -81,6 +81,9 @@ export const L3_INTRO: DialogueLine[] = [
   hen(CHARACTERS.paulie, 'Boss, half the district’s sick. It’s the big pipe.'),
   cit(CHARACTERS.della, 'My children won’t wake, Sir. The pipe never stops.'),
   cit(CHARACTERS.della, 'It runs up to the surface. To the men’s side.'),
+  reg('Della. Look at me. No harm comes to your children. Not while I hold this water.'),
+  cit(CHARACTERS.della, 'You... you swear it, Sir?'),
+  reg('I do not swear. I arrange. Rest now — you are safe.'),
   reg('Then we follow it up. To whoever holds the other end.'),
   reg('Paulie. Bring my temper.'),
 ]

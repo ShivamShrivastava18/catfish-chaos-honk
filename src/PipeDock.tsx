@@ -7,6 +7,8 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { AdditiveBlending, DoubleSide, Quaternion, Vector3, type Points as ThreePoints, type MeshBasicMaterial } from 'three'
+import { useGame } from './store'
+import { LEVELS } from './levels'
 
 interface PipeDockProps {
   pipe: [number, number, number]
@@ -120,6 +122,13 @@ function FlowSheet({ dirSign }: { dirSign: number }) {
 export function PipeDock({ pipe, dock, scale = 1, flip = false }: PipeDockProps) {
   const dirSign = flip ? -1 : 1
 
+  // Flow stops once the outflow valve is wrenched shut. If the current level has a
+  // valve objective, gush until the player passes it; otherwise (L4 backdrop) always.
+  const levelIndex = useGame((s) => s.levelIndex)
+  const objectiveIndex = useGame((s) => s.objectiveIndex)
+  const valveIdx = LEVELS[levelIndex]?.objectives.findIndex((o) => o.id === 'l3-jam-valve') ?? -1
+  const flowing = valveIdx < 0 || objectiveIndex <= valveIdx
+
   // Everything is authored in a local frame whose origin is the outflow mouth
   // (world `pipe`); the dock sits at the local delta to world `dock`.
   const [delta, quat, length] = useMemo(() => {
@@ -206,9 +215,13 @@ export function PipeDock({ pipe, dock, scale = 1, flip = false }: PipeDockProps)
         ))}
       </group>
 
-      {/* ---- Polluted outflow ---- */}
-      <FlowSheet dirSign={dirSign} />
-      <Gush dirSign={dirSign} floorY={floorY} />
+      {/* ---- Polluted outflow (stops once the valve is wrenched shut) ---- */}
+      {flowing && (
+        <>
+          <FlowSheet dirSign={dirSign} />
+          <Gush dirSign={dirSign} floorY={floorY} />
+        </>
+      )}
     </group>
   )
 }

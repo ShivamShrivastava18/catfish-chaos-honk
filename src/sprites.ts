@@ -56,6 +56,9 @@ export const SPRITES = {
   net: '/sprites/net.png',
   nursery: '/sprites/nursery.png',
   fry: '/sprites/fry.png',
+  drum: '/sprites/drum.png',
+  valve: '/sprites/valve.png',
+  sludge: '/sprites/sludge.png',
 
   // Decor.
   seaweedTall: '/sprites/seaweedTall.png',
