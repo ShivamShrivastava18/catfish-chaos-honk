@@ -47,6 +47,11 @@ export function LevelCard() {
           <h2 style={clearTitle}>{level.title}</h2>
           <div style={clearBadge}>CHAPTER CLEAR</div>
           <p style={clearNote}>River clarity restored to {health}%.</p>
+          <div style={factPanel}>
+            <p style={factEyebrow}>Did you know?</p>
+            <p style={factText}>{level.envFact.text}</p>
+            <p style={factSource}>— {level.envFact.source}</p>
+          </div>
           <button
             style={continueBtn}
             onClick={() => nextLevel()}
@@ -86,6 +91,7 @@ const keyframes = `
 @keyframes lvlOverlayIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes lvlCardIn { from { opacity: 0; transform: translateY(22px) scale(0.96); } to { opacity: 1; transform: none; } }
 @keyframes badgePop { 0% { transform: scale(0.7); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes factIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 `
 
 // --- level-start banner (non-blocking) ---
@@ -183,7 +189,39 @@ const clearBadge: React.CSSProperties = {
 const clearNote: React.CSSProperties = {
   fontSize: 14,
   opacity: 0.85,
-  margin: '18px 0 22px',
+  margin: '18px 0 16px',
+}
+
+// --- "Did you know?" real environmental fact panel ---
+const factPanel: React.CSSProperties = {
+  animation: 'factIn 0.6s 0.5s cubic-bezier(0.2,0.8,0.2,1) both',
+  textAlign: 'left',
+  background: 'rgba(4,26,40,0.55)',
+  border: '1px solid rgba(127,240,208,0.28)',
+  borderLeft: '3px solid #7ff0d0',
+  borderRadius: 10,
+  padding: '12px 14px',
+  margin: '0 0 22px',
+}
+const factEyebrow: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: 2,
+  textTransform: 'uppercase',
+  color: '#7ff0d0',
+  margin: '0 0 6px',
+}
+const factText: React.CSSProperties = {
+  fontSize: 13,
+  lineHeight: 1.5,
+  opacity: 0.92,
+  margin: 0,
+}
+const factSource: React.CSSProperties = {
+  fontSize: 10.5,
+  fontStyle: 'italic',
+  opacity: 0.6,
+  margin: '8px 0 0',
 }
 const continueBtn: React.CSSProperties = {
   cursor: 'pointer',

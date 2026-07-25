@@ -55,7 +55,29 @@ interface Objective {
   hint?: string                      // tutorial/controls hint for the ACTIVE objective
   doneLine?: string                  // Reginald bark spoken on completion (mid-level only)
 }
-interface PropPlacement { sprite: SpriteKey; pos: [number, number, number]; scale?: number; flip?: boolean }
+interface PropPlacement {
+  sprite: SpriteKey; pos: [number, number, number]; scale?: number; flip?: boolean
+  debris?: boolean                   // L1: part of the clearable clump; hide once its reveal objective is done
+}
+
+// v3 additions --------------------------------------------------------------
+interface EnvFact { text: string; source: string }   // REAL, attributed; shown on chapter-clear (LevelCard)
+interface RevealMarker {                              // L1: nursery hidden UNDER the debris clump
+  sprite: SpriteKey; pos: [number, number, number]; scale?: number
+  afterObjective: string             // objective id whose completion reveals this + hides matching debris
+}
+interface FrySpawn {                                  // L2: fry that swim out of the cut net
+  sprite: SpriteKey
+  pos: [number, number, number]      // where the fry start (inside the net)
+  target: [number, number, number]   // where they swim to once freed
+  count: number
+  afterObjective: string             // objective id (cutting the net) that releases the fry
+}
+interface PipeDock {                                  // L3 reveal / L4 backdrop — real 3D pipe + surface dock
+  pipe: [number, number, number]     // submerged pipe anchor
+  dock: [number, number, number]     // above-surface platform dumping polluted water
+}
+
 interface Level {
   id: string; index: number; title: string; subtitle: string
   waterTint: string                  // per-level base water hue (distinct from waterColor(health))
@@ -65,11 +87,25 @@ interface Level {
   objectives: Objective[]            // ORDERED breadcrumb; only objectives[objectiveIndex] is targetable
   props: PropPlacement[]             // dense, deliberate environment layout
   path: [number, number][]          // (x,y) waypoints forming the swim lane
+  envFact: EnvFact                   // REQUIRED on every level; matched to the level theme
+  reveal?: RevealMarker              // L1 only: the nursery nest/eggs beneath the debris
+  fry?: FrySpawn                     // L2 only: baby fish freed by the cut net
+  pipeDock?: PipeDock                // L3 + L4: the 3D outflow pipe / surface dock
 }
 
 export const LEVELS: Level[]                 // [L1, L2, L3, L4]
 export const LEVEL_COUNT: number             // 4
 export function getLevel(index: number): Level | undefined
+
+// LEVEL DATA FLAGS other systems must read (v3):
+//  L1: props[].debris === true mark the clump over the nursery; level.reveal draws the
+//      'nursery' sprite (afterObjective 'l1-dig-silt') once that clump is dug clear.
+//  L2: objectives[0] ('l2-cut-net') sprite === 'net'; level.fry spawns 'fry' that swim
+//      pos -> target (afterObjective 'l2-cut-net').
+//  L3: level.pipeDock -> PipeDock draws the real 3D pipe + dock; 'l3-follow-pipe' leads up to it.
+//  L4: NO static boss prop (Boss.tsx renders the mobile scuba Vitale); level.pipeDock is the
+//      dock/pipe ceiling backdrop. objectives are 3x kind 'bossHit'.
+//  ALL: level.envFact { text, source } — real cited fact for the chapter-clear card.
 `
 
 // ---------------------------------------------------------------------------
@@ -96,9 +132,16 @@ interface GameState {
   lineIndex: number             // cursor into dialogue[]
   honkPulse: number             // increments on honk() — subscribe to react (shake/sfx)
 
+  // ---- boss fight: Reginald health + last-chance / game-over (v3) ----
+  playerHealth: number          // 0..maxPlayerHealth; only meaningful during the boss fight
+  maxPlayerHealth: number       // full health (3)
+  lastChanceUsed: boolean       // true once the first death burned the last stand (Reginald is hatless + cigar)
+  reviving: boolean             // transient one-shot: Player watches this to animate hat-float + cigar reveal
+
   // ---- actions ----
   startGame: () => void                 // title -> beginLevel(0)
-  beginLevel: (i: number) => void       // load level i: phase 'intro', reset objective/health, show intro[0]
+  beginLevel: (i: number) => void       // load level i: phase 'intro', reset objective/riverHealth AND
+                                          //   playerHealth=max, lastChanceUsed=false, reviving=false; show intro[0]
   startPlaying: () => void              // phase 'playing', clears dialogue/currentLine (auto at intro end)
   completeObjective: (id: string) => void // no-op unless phase==='playing' AND id===active objective id;
                                           //   advances objectiveIndex, raises riverHealth, barks doneLine;
@@ -107,7 +150,13 @@ interface GameState {
   advanceDialogue: () => void           // intro/outro only: next line, else hand off (intro->playing, outro->levelclear)
   say: (line: DialogueLine) => void     // set currentLine, auto-clear after 2.6s (repeat calls reset timer)
   honk: () => void                      // honkPulse++ and say(HONK_LINE)
-  reset: () => void                     // full reset to 'title', clears say timer
+  damagePlayer: (n?: number) => void    // NO-OP unless phase==='playing' AND LEVELS[levelIndex].isBoss.
+                                          //   playerHealth -= n (default 1). If it hits 0:
+                                          //     - first time  (!lastChanceUsed): set lastChanceUsed=true, reviving=true,
+                                          //       playerHealth=maxPlayerHealth  (hat floats off, cigar lit, fight continues)
+                                          //     - second time (lastChanceUsed):  reset() -> GAME OVER, back to title/L1
+  endReviving: () => void               // Player calls this once the hat-float/cigar animation has finished (reviving=false)
+  reset: () => void                     // full reset to 'title' (health/lastChance/reviving cleared), clears say timer
 }
 
 // Usage
@@ -146,6 +195,33 @@ Rendering rules for consumers:
 `
 
 // ---------------------------------------------------------------------------
+// Boss fight + death / last-chance flow  (v3)
+// ---------------------------------------------------------------------------
+export const BOSS_DEATH_CONTRACT = `
+BOSS (L4, isBoss) — Don Vitale SWIMS the whole fight in a scuba suit (Boss.tsx, no
+static prop). He hurls waste barrels; Reginald dodges. A barrel thrown back HOMES on
+Vitale's LIVE position. Three 'bossHit' objectives = three good hits = win (-> outro).
+
+REGINALD HEALTH: playerHealth (0..maxPlayerHealth=3). A Reginald health bar renders
+during the boss fight. Barrels that strike Reginald call:
+    useGame.getState().damagePlayer(1)   // only lands while phase==='playing' && level.isBoss
+Boss battle music plays for the duration of the fight (AudioController).
+
+DEATH / LAST CHANCE (all handled inside damagePlayer):
+  playerHealth reaches 0, FIRST time:
+    lastChanceUsed -> true, reviving -> true, playerHealth -> max.
+    Player watches 'reviving': the TOP HAT floats away + a CIGAR appears (defiant last
+    stand). Swap Reginald's sprite to reginaldNoHat/reginaldCigar while lastChanceUsed.
+    Call useGame.getState().endReviving() when that animation finishes (reviving -> false).
+    The SAME fight continues at full health.
+  playerHealth reaches 0, SECOND time (lastChanceUsed already true):
+    damagePlayer calls reset() -> GAME OVER -> back to title, restart from level 1.
+
+beginLevel() and reset() both clear playerHealth(=max)/lastChanceUsed/reviving, so a
+fresh boss attempt (or any level) always starts hatted and at full health.
+`
+
+// ---------------------------------------------------------------------------
 // Sprite manifest  (src/sprites.ts — owned by the sprites/art agent)
 // ---------------------------------------------------------------------------
 export const SPRITE_MANIFEST_CONTRACT = `
@@ -178,6 +254,7 @@ export const CONTRACTS = [
   DATA_SHAPES_CONTRACT,
   STORE_CONTRACT,
   STATE_MACHINE_CONTRACT,
+  BOSS_DEATH_CONTRACT,
   SPRITE_MANIFEST_CONTRACT,
   WIRING_CONTRACT,
 ] as const

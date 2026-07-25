@@ -1,49 +1,70 @@
-// Boss.tsx — L4 "Sleep With The Fishes" final fight.
-// Don Vitale stands on the dock ABOVE the waterline (rendered by the level's
-// bossDonMan prop). He telegraphs, then DROPS waste barrels that sink toward the
-// player. Dodge them; a barrel that settles on the seabed becomes grabbable —
-// press SPACE to grab it, SPACE again to HURL it up at the Don. Three good hits
-// end the fight (each hit completes the active bossHit objective; the store rolls
-// into the victory outro on the third). Renders only on the boss level.
-import { useEffect, useRef } from 'react'
+// Boss.tsx — L4 "Sleep With The Fishes": the fully underwater final fight.
+// Don Vitale wears a SCUBA suit and SWIMS the whole time — a mobile diver that
+// wanders the upper play area (BOSS_SCUBA_FRAMES, facing his travel direction).
+// He HURLS waste barrels down at Reginald (telegraph reticle -> fast barrel).
+// Dodge them; a barrel that settles on the seabed glows green — SPACE to grab,
+// SPACE again to HURL it back. A thrown barrel HOMES on Vitale's LIVE position.
+// Three good hits win; each completes the active bossHit objective and the store
+// rolls into the victory outro on the third. A barrel that clips Reginald costs
+// him one health (damagePlayer, with a short invuln). Renders only on the boss level.
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Group, Vector3, MathUtils, type Mesh, type MeshStandardMaterial, type MeshBasicMaterial } from 'three'
+import {
+  Group,
+  Vector3,
+  MathUtils,
+  type Mesh,
+  type MeshStandardMaterial,
+  type MeshBasicMaterial,
+} from 'three'
 import { useGame } from './store'
 import { getPlayerPos } from './Player'
 import { LEVELS } from './levels'
+import { BillboardSprite } from './BillboardSprite'
+import { SPRITES, BOSS_SCUBA_FRAMES } from './sprites'
+
+const SCUBA_URLS = BOSS_SCUBA_FRAMES.map((k) => SPRITES[k])
 
 // --- Fight geometry ---
-const BOSS = new Vector3(0, 6, 0) // aim point on the dock (matches bossDonMan prop)
-const DOCK_Y = 5.4 // where dropped barrels spawn
-const SEABED_Y = -2.6 // where falling barrels settle (become grabbable)
-const DROP_MIN_X = -9
-const DROP_MAX_X = 9
+const SEABED_Y = -2.6 // where a hurled barrel settles (becomes grabbable)
+const BOSS_SCALE = 3.4
+
+// Vitale's wander box (kept in the upper play area, above Reginald's lane).
+const BOSS_MIN_X = -8.5
+const BOSS_MAX_X = 8.5
+const BOSS_MIN_Y = 3.8
+const BOSS_MAX_Y = 7.6
+const BOSS_SPEED = 3.6
+const BOSS_ARRIVE = 0.7 // distance to a waypoint that counts as "arrived"
 
 // --- Tuning ---
-const POOL = 10
-const FALL_GRAV = -7 // sink acceleration
-const FALL_TERMINAL = -6
-const THROW_SPEED = 17
-const THROW_GRAV = -3 // gentle arc on thrown barrels
-const GRAB_R = 2.3 // reach to a resting barrel
-const PLAYER_HIT_R = 1.15 // a falling barrel this close clips the player
-const BOSS_HIT_R = 2.4 // a thrown barrel this close counts as a hit
-const HIT_INVULN = 0.45 // debounce so one throw = one hit
+const POOL = 12
+const HURL_SPEED = 12 // boss -> player barrel launch speed
+const HURL_GRAV = -4 // gentle sink on hurled barrels
+const HURL_TERMINAL = -9
+const THROW_SPEED = 18 // player -> boss (homing)
+const THROW_LEAD = 0.22 // seconds of Vitale's velocity to lead
+const GRAB_R = 2.4 // reach to a resting barrel
+const PLAYER_HIT_R = 1.1 // a hurled barrel this close clips Reginald
+const BOSS_HIT_R = 2.2 // a thrown barrel this close counts as a hit
+const HIT_INVULN = 0.4 // debounce so one throw = one boss hit
+const PLAYER_INVULN = 1.0 // grace after taking a hit (one barrel = one hit)
 
-// Escalating, breadcrumbed difficulty by hits landed (0,1,2).
-const DROP_INTERVAL = [2.6, 2.1, 1.6]
-const TELEGRAPH_TIME = [1.1, 0.9, 0.72]
+// Escalating cadence by hits landed (0,1,2).
+const HURL_INTERVAL = [2.6, 2.1, 1.6]
+const TELEGRAPH_TIME = [1.0, 0.82, 0.68]
 
 // --- Barrel colors ---
 const BARREL_BASE = '#435a37'
-const HAZARD = '#ff7a1a' // falling / thrown = dangerous glow
+const HAZARD = '#ff7a1a' // hurled / thrown = dangerous glow
 const GRABBABLE = '#39ff88' // resting = grab-me glow
 
-type BarrelState = 'idle' | 'falling' | 'resting' | 'held' | 'thrown'
+type BarrelState = 'idle' | 'hurled' | 'resting' | 'held' | 'thrown'
 interface Barrel {
   state: BarrelState
   pos: Vector3
   vel: Vector3
+  t: number // lifetime (safety recycle for thrown/hurled)
 }
 
 interface Puff {
@@ -92,6 +113,7 @@ export function Boss() {
       state: 'idle' as BarrelState,
       pos: new Vector3(),
       vel: new Vector3(),
+      t: 0,
     })),
   )
   const barrelRefs = useRef<(Group | null)[]>([])
@@ -103,19 +125,29 @@ export function Boss() {
   const puffRefs = useRef<(Mesh | null)[]>([])
   const puffMats = useRef<(MeshBasicMaterial | null)[]>([])
 
-  const pipRefs = useRef<(MeshStandardMaterial | null)[]>([])
   const telegraphRef = useRef<Mesh>(null)
   const telegraphMat = useRef<MeshBasicMaterial>(null)
   const flashMat = useRef<MeshBasicMaterial>(null)
 
+  // Don Vitale — mobile scuba diver.
+  const bossGroup = useRef<Group>(null)
+  const bossPos = useRef(new Vector3(0, 6, 0)) // live position (homing target)
+  const bossBase = useRef(new Vector3(0, 6, 0)) // wander position pre-bob
+  const bossVel = useRef(new Vector3())
+  const bossWaypoint = useRef(new Vector3(0, 6, 0))
+  const bossFacingRight = useRef(true)
+  const [bossFlip, setBossFlip] = useState(true) // reactive mirror so the sprite flips live
+
   const held = useRef<number>(-1)
   const pressed = useRef(false)
-  const dropPhase = useRef<'wait' | 'telegraph'>('wait')
-  const dropTimer = useRef(-1)
-  const telegraphX = useRef(0)
-  const invulnUntil = useRef(0)
+  const attackPhase = useRef<'wait' | 'telegraph'>('wait')
+  const attackTimer = useRef(-1)
+  const aimPoint = useRef(new Vector3())
+  const bossInvulnUntil = useRef(0)
+  const playerInvulnUntil = useRef(0)
   const flashUntil = useRef(0)
   const player = useRef(new Vector3())
+  const wasReviving = useRef(false)
 
   // SPACE grabs a resting barrel / hurls the held one.
   useEffect(() => {
@@ -141,17 +173,68 @@ export function Boss() {
     p.pos.copy(pos)
   }
 
+  const pickWaypoint = () => {
+    bossWaypoint.current.set(
+      MathUtils.lerp(BOSS_MIN_X, BOSS_MAX_X, Math.random()),
+      MathUtils.lerp(BOSS_MIN_Y, BOSS_MAX_Y, Math.random()),
+      0,
+    )
+  }
+
   useFrame((_, rawDelta) => {
     if (!isBoss) return
     const delta = Math.min(rawDelta, 0.05)
     const state = useGame.getState()
-    const now = state ? performance.now() / 1000 : 0
+    const now = performance.now() / 1000
     const playing = state.gamePhase === 'playing'
 
     const pp = getPlayerPos()
     player.current.set(pp[0], pp[1], pp[2])
 
-    // --- Not fighting: park everything so re-entry is clean ---
+    // --- Vitale keeps swimming in every phase (idle wander when not fighting) ---
+    const grp = bossGroup.current
+    if (grp) {
+      grp.visible = state.gamePhase === 'playing' || state.gamePhase === 'outro'
+      // Wander toward the current waypoint.
+      const toWp = bossWaypoint.current.clone().sub(bossBase.current)
+      const dist = toWp.length()
+      if (dist < BOSS_ARRIVE) {
+        pickWaypoint()
+      } else {
+        toWp.multiplyScalar(1 / dist)
+        const step = BOSS_SPEED * delta
+        bossBase.current.addScaledVector(toWp, step)
+        bossVel.current.copy(toWp).multiplyScalar(BOSS_SPEED)
+      }
+      // Live position = wander base + gentle vertical bob.
+      bossPos.current.set(bossBase.current.x, bossBase.current.y + Math.sin(now * 2) * 0.18, 0)
+      grp.position.copy(bossPos.current)
+      // Face travel direction (hysteresis so it doesn't flicker).
+      if (bossVel.current.x > 0.3 && !bossFacingRight.current) {
+        bossFacingRight.current = true
+        setBossFlip(true)
+      } else if (bossVel.current.x < -0.3 && bossFacingRight.current) {
+        bossFacingRight.current = false
+        setBossFlip(false)
+      }
+    }
+
+    // --- Revive grace: on Reginald's last stand, sweep away live threats ---
+    if (state.reviving && !wasReviving.current) {
+      for (let i = 0; i < POOL; i++) {
+        if (barrels.current[i].state === 'hurled') {
+          barrels.current[i].state = 'idle'
+          const g = barrelRefs.current[i]
+          if (g) g.visible = false
+        }
+      }
+      attackPhase.current = 'wait'
+      attackTimer.current = now + 1.6
+      playerInvulnUntil.current = now + 1.6
+    }
+    wasReviving.current = state.reviving
+
+    // --- Not fighting: park barrels/telegraph so re-entry is clean ---
     if (!playing) {
       for (let i = 0; i < POOL; i++) {
         barrels.current[i].state = 'idle'
@@ -159,11 +242,10 @@ export function Boss() {
         if (g) g.visible = false
       }
       held.current = -1
-      dropPhase.current = 'wait'
-      dropTimer.current = -1
+      attackPhase.current = 'wait'
+      attackTimer.current = -1
       const tg = telegraphRef.current
       if (tg) tg.visible = false
-      // still advance puffs so lingering effects fade out
       updatePuffs(delta)
       updateFlash(now)
       return
@@ -171,38 +253,38 @@ export function Boss() {
 
     const hits = Math.min(objectiveIndex, 2)
 
-    // --- Drop cycle: wait -> telegraph -> spawn falling barrel ---
-    if (dropTimer.current < 0) dropTimer.current = now + 1.2 // grace on entry
-    if (dropPhase.current === 'wait') {
-      if (now >= dropTimer.current) {
-        // Bias the drop toward the player so dodging matters, but keep it fair.
-        telegraphX.current = MathUtils.clamp(
-          player.current.x + (Math.random() - 0.5) * 6,
-          DROP_MIN_X,
-          DROP_MAX_X,
-        )
-        dropPhase.current = 'telegraph'
-        dropTimer.current = now + TELEGRAPH_TIME[hits]
+    // --- Attack cycle: wait -> telegraph (reticle on Reginald) -> hurl barrel ---
+    if (attackTimer.current < 0) attackTimer.current = now + 1.4 // grace on entry
+    if (attackPhase.current === 'wait') {
+      if (now >= attackTimer.current) {
+        aimPoint.current.copy(player.current) // lock aim where Reginald is now
+        attackPhase.current = 'telegraph'
+        attackTimer.current = now + TELEGRAPH_TIME[hits]
       }
-    } else if (now >= dropTimer.current) {
+    } else if (now >= attackTimer.current) {
       const b = barrels.current.find((x) => x.state === 'idle')
       if (b) {
-        b.state = 'falling'
-        b.pos.set(telegraphX.current, DOCK_Y, 0)
-        b.vel.set(0, -1, 0)
+        b.state = 'hurled'
+        b.t = 0
+        b.pos.copy(bossPos.current)
+        const dir = aimPoint.current.clone().sub(b.pos)
+        const l = dir.length() || 1
+        b.vel.set((dir.x / l) * HURL_SPEED, (dir.y / l) * HURL_SPEED, 0)
       }
-      dropPhase.current = 'wait'
-      dropTimer.current = now + DROP_INTERVAL[hits]
+      attackPhase.current = 'wait'
+      attackTimer.current = now + HURL_INTERVAL[hits]
     }
 
-    // Telegraph column: warns exactly where the next barrel will fall.
+    // Telegraph reticle — warns exactly where the next barrel is aimed.
     const tg = telegraphRef.current
     if (tg) {
-      const on = dropPhase.current === 'telegraph'
+      const on = attackPhase.current === 'telegraph'
       tg.visible = on
       if (on) {
-        tg.position.x = telegraphX.current
-        if (telegraphMat.current) telegraphMat.current.opacity = 0.25 + Math.abs(Math.sin(now * 12)) * 0.3
+        tg.position.set(aimPoint.current.x, aimPoint.current.y, 0.5)
+        const pulse = 1 + Math.abs(Math.sin(now * 12)) * 0.4
+        tg.scale.setScalar(pulse)
+        if (telegraphMat.current) telegraphMat.current.opacity = 0.4 + Math.abs(Math.sin(now * 12)) * 0.35
       }
     }
 
@@ -210,13 +292,11 @@ export function Boss() {
     if (pressed.current) {
       pressed.current = false
       if (held.current >= 0) {
-        // Hurl the held barrel at the Don.
+        // Hurl the held barrel — it HOMES, so just get it moving upward.
         const b = barrels.current[held.current]
-        const dx = BOSS.x - b.pos.x
-        const dy = BOSS.y - b.pos.y
-        const l = Math.hypot(dx, dy) || 1
         b.state = 'thrown'
-        b.vel.set((dx / l) * THROW_SPEED, (dy / l) * THROW_SPEED, 0)
+        b.t = 0
+        b.vel.set(0, THROW_SPEED, 0)
         held.current = -1
       } else {
         // Grab the nearest resting barrel in reach.
@@ -250,23 +330,36 @@ export function Boss() {
         continue
       }
       g.visible = true
+      b.t += delta
 
-      if (b.state === 'falling') {
-        b.vel.y = Math.max(b.vel.y + FALL_GRAV * delta, FALL_TERMINAL)
+      if (b.state === 'hurled') {
+        b.vel.y = Math.max(b.vel.y + HURL_GRAV * delta, HURL_TERMINAL)
+        b.pos.x += b.vel.x * delta
         b.pos.y += b.vel.y * delta
-        // Clipped the player mid-fall — punish with a shake, then despawn.
-        if (Math.hypot(b.pos.x - player.current.x, b.pos.y - player.current.y) < PLAYER_HIT_R) {
+        // Clipped Reginald mid-flight — one health, then despawn (respect invuln).
+        if (
+          now >= playerInvulnUntil.current &&
+          Math.hypot(b.pos.x - player.current.x, b.pos.y - player.current.y) < PLAYER_HIT_R
+        ) {
+          playerInvulnUntil.current = now + PLAYER_INVULN
+          useGame.getState().damagePlayer(1)
           spawnPuff(b.pos, false)
           triggerShake(false)
           b.state = 'idle'
           g.visible = false
           continue
         }
+        // Settles on the seabed -> grabbable.
         if (b.pos.y <= SEABED_Y) {
           b.pos.y = SEABED_Y
+          b.pos.x = MathUtils.clamp(b.pos.x, BOSS_MIN_X, BOSS_MAX_X)
           b.vel.set(0, 0, 0)
           b.state = 'resting'
-          spawnPuff(b.pos, false) // settle splash
+          spawnPuff(b.pos, false)
+        } else if (b.pos.x < -14 || b.pos.x > 14) {
+          b.state = 'idle'
+          g.visible = false
+          continue
         }
       } else if (b.state === 'held') {
         b.pos.lerp(
@@ -274,17 +367,22 @@ export function Boss() {
           1 - Math.pow(0.0009, delta),
         )
       } else if (b.state === 'thrown') {
-        b.vel.y += THROW_GRAV * delta
-        b.pos.x += b.vel.x * delta
-        b.pos.y += b.vel.y * delta
-        // Hit the Don?
+        // HOME on Vitale's LIVE position (lead his velocity a touch).
+        const aim = bossPos.current
+          .clone()
+          .addScaledVector(bossVel.current, THROW_LEAD)
+        const dir = aim.sub(b.pos)
+        const l = dir.length() || 1
+        b.vel.set((dir.x / l) * THROW_SPEED, (dir.y / l) * THROW_SPEED, 0)
+        b.pos.addScaledVector(b.vel, delta)
+        // Hit Vitale?
         if (
-          now >= invulnUntil.current &&
-          Math.hypot(b.pos.x - BOSS.x, b.pos.y - BOSS.y) < BOSS_HIT_R
+          now >= bossInvulnUntil.current &&
+          b.pos.distanceTo(bossPos.current) < BOSS_HIT_R
         ) {
-          invulnUntil.current = now + HIT_INVULN
+          bossInvulnUntil.current = now + HIT_INVULN
           flashUntil.current = now + 0.35
-          spawnPuff(BOSS, true)
+          spawnPuff(bossPos.current, true)
           triggerShake(true)
           const active = LEVELS[state.levelIndex]?.objectives[state.objectiveIndex]
           if (active) useGame.getState().completeObjective(active.id)
@@ -292,8 +390,8 @@ export function Boss() {
           g.visible = false
           continue
         }
-        // Missed / flew off — recycle.
-        if (b.pos.y > 9.5 || b.pos.x < -14 || b.pos.x > 14) {
+        // Safety recycle if it somehow never connects.
+        if (b.t > 4 || b.pos.y > 11 || b.pos.x < -14 || b.pos.x > 14) {
           b.state = 'idle'
           g.visible = false
           continue
@@ -361,6 +459,44 @@ export function Boss() {
 
   return (
     <>
+      {/* Don Vitale — mobile scuba diver, with a hit flash + health pips riding along */}
+      <group ref={bossGroup} position={[0, 6, 0]}>
+        <Suspense fallback={null}>
+          <BillboardSprite
+            frames={SCUBA_URLS}
+            fps={6}
+            scale={BOSS_SCALE}
+            flipX={bossFlip}
+          />
+        </Suspense>
+
+        {/* Hit flash over Vitale */}
+        <mesh position={[0, 0, 0.6]}>
+          <planeGeometry args={[4.4, 5.2]} />
+          <meshBasicMaterial
+            ref={flashMat}
+            color="#ff5a3c"
+            transparent
+            opacity={0}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+
+        {/* Boss health pips above his head */}
+        {[0, 1, 2].map((i) => (
+          <mesh key={i} position={[-1 + i * 1, 2.7, 0.3]}>
+            <boxGeometry args={[0.7, 0.28, 0.28]} />
+            <meshStandardMaterial
+              color={i < remaining ? '#54e08a' : '#243b2f'}
+              emissive={i < remaining ? '#2fae66' : '#000000'}
+              emissiveIntensity={i < remaining ? 0.5 : 0}
+              roughness={0.5}
+            />
+          </mesh>
+        ))}
+      </group>
+
       {/* Barrel pool */}
       {barrels.current.map((_, i) => (
         <group key={i} ref={(g) => (barrelRefs.current[i] = g)} visible={false}>
@@ -402,45 +538,18 @@ export function Boss() {
         </mesh>
       ))}
 
-      {/* Telegraph column — shows where the next barrel drops */}
-      <mesh ref={telegraphRef} position={[0, (DOCK_Y + SEABED_Y) / 2, -0.4]} visible={false}>
-        <planeGeometry args={[1.1, DOCK_Y - SEABED_Y]} />
+      {/* Telegraph reticle — pulses where the next hurled barrel is aimed */}
+      <mesh ref={telegraphRef} visible={false}>
+        <ringGeometry args={[0.7, 1.0, 28]} />
         <meshBasicMaterial
           ref={telegraphMat}
           color="#ff3b3b"
           transparent
-          opacity={0.35}
+          opacity={0.5}
           depthWrite={false}
           toneMapped={false}
         />
       </mesh>
-
-      {/* Hit flash over the Don */}
-      <mesh position={[BOSS.x, BOSS.y, 0.6]}>
-        <planeGeometry args={[5, 6]} />
-        <meshBasicMaterial
-          ref={flashMat}
-          color="#ff5a3c"
-          transparent
-          opacity={0}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Boss health pips above the dock */}
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} position={[-1 + i * 1, 7.2, 0.5]}>
-          <boxGeometry args={[0.7, 0.28, 0.28]} />
-          <meshStandardMaterial
-            ref={(m) => (pipRefs.current[i] = m)}
-            color={i < remaining ? '#54e08a' : '#243b2f'}
-            emissive={i < remaining ? '#2fae66' : '#000000'}
-            emissiveIntensity={i < remaining ? 0.5 : 0}
-            roughness={0.5}
-          />
-        </mesh>
-      ))}
     </>
   )
 }

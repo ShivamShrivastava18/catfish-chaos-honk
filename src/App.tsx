@@ -11,6 +11,8 @@ import { Juice } from './Juice'
 import { TitleScreen } from './TitleScreen'
 import { EndCard } from './EndCard'
 import { AudioController } from './AudioController'
+import { IntroActors } from './IntroActors'
+import { GameOverCard } from './GameOverCard'
 import { useGame } from './store'
 
 export function App() {
@@ -22,6 +24,7 @@ export function App() {
       <Canvas camera={{ position: [0, 4, 14], fov: 55 }} dpr={[1, 2]}>
         <Scene />
         {inLevel && <Level />}
+        <IntroActors />
         <EffectComposer>
           <Bloom intensity={0.6} luminanceThreshold={0.6} mipmapBlur />
           <Vignette eskil={false} offset={0.25} darkness={0.75} />
@@ -37,6 +40,7 @@ export function App() {
       <Juice />
       {gamePhase === 'title' && <TitleScreen />}
       {gamePhase === 'won' && <EndCard />}
+      <GameOverCard />
       <AudioController />
     </>
   )

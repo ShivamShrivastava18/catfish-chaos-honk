@@ -32,6 +32,43 @@ export interface PropPlacement {
   pos: [number, number, number]
   scale?: number
   flip?: boolean
+  debris?: boolean // part of a clearable clump; hidden once its `revealAfter` objective is done
+}
+
+/** One real, attributed environmental fact, shown on the chapter-clear card. */
+export interface EnvFact {
+  text: string
+  source: string
+}
+
+/**
+ * A sprite hidden UNDER a debris clump (L1 nursery). Environment/Objectives draw
+ * it once the objective `afterObjective` completes — the reveal beneath the silt.
+ */
+export interface RevealMarker {
+  sprite: SpriteKey
+  pos: [number, number, number]
+  scale?: number
+  afterObjective: string // objective id whose completion reveals this + hides matching debris
+}
+
+/** Baby fish that SWIM OUT of the cut net (L2). Released when `afterObjective` completes. */
+export interface FrySpawn {
+  sprite: SpriteKey
+  pos: [number, number, number] // where the fry start (inside the net)
+  target: [number, number, number] // where they swim to once freed
+  count: number
+  afterObjective: string // objective id (cutting the net) that releases the fry
+}
+
+/**
+ * Marks the real 3D outflow pipe + surface dock (L3 reveal, L4 backdrop). The
+ * PipeDock component reads this; `pipe` is the submerged pipe anchor, `dock` the
+ * above-surface platform dumping polluted water.
+ */
+export interface PipeDock {
+  pipe: [number, number, number]
+  dock: [number, number, number]
 }
 
 export interface Level {
@@ -48,6 +85,10 @@ export interface Level {
   objectives: Objective[]
   props: PropPlacement[]
   path: [number, number][]
+  envFact: EnvFact // REAL, attributed fact matched to the level theme (shown on chapter-clear)
+  reveal?: RevealMarker // L1: the nursery nest/eggs beneath the debris clump
+  fry?: FrySpawn // L2: baby fish that swim out of the cut net
+  pipeDock?: PipeDock // L3/L4: the 3D outflow pipe + surface dock
 }
 
 // ---------------------------------------------------------------------------
@@ -75,12 +116,12 @@ const LEVEL_1: Level = {
   objectives: [
     {
       id: 'l1-dig-silt',
-      kind: 'grab',
+      kind: 'clear',
       pos: [-6.5, -2.4, 0],
       sprite: 'rockBrown',
-      label: 'Dig the silt off the nursery',
-      hint: 'Hold W A S D to swim over, then press SPACE to grab',
-      doneLine: 'Filth. Overnight, she said.',
+      label: 'Dig out the debris clump smothering the nursery',
+      hint: 'Hold W A S D to swim into the heaped silt and press SPACE to dig it clear',
+      doneLine: 'Filth. Heaped on overnight, she said.',
     },
     {
       id: 'l1-haul-silt',
@@ -113,6 +154,18 @@ const LEVEL_1: Level = {
     },
   ],
   props: [
+    // DEBRIS CLUMP — heaped densely over the nursery at [-6.5,-2.4]. Cleared by
+    // the 'l1-dig-silt' objective; hidden afterward to REVEAL the nursery beneath.
+    { sprite: 'rockBrown', pos: [-6.8, -2.3, 0.2], scale: 1.2, debris: true },
+    { sprite: 'rockGrey', pos: [-6.2, -2.5, 0.3], scale: 1.1, debris: true, flip: true },
+    { sprite: 'rockBrown', pos: [-6.5, -1.9, 0.4], scale: 1, debris: true },
+    { sprite: 'rockGrey', pos: [-7.1, -2.7, 0.1], scale: 0.9, debris: true },
+    { sprite: 'rockBrown', pos: [-5.9, -2.1, 0.3], scale: 0.95, debris: true, flip: true },
+    { sprite: 'rockGrey', pos: [-6.9, -1.7, 0.5], scale: 0.8, debris: true },
+    { sprite: 'coral', pos: [-6.3, -2.9, 0.2], scale: 0.9, debris: true },
+    { sprite: 'rockBrown', pos: [-7.3, -2.2, 0.35], scale: 0.85, debris: true },
+    { sprite: 'rockGrey', pos: [-5.7, -2.6, 0.25], scale: 0.9, debris: true, flip: true },
+    { sprite: 'rockBrown', pos: [-6.6, -2.4, 0.55], scale: 0.8, debris: true },
     { sprite: 'seaweedTall', pos: [-11, -3, -3], scale: 2.4 },
     { sprite: 'seaweedTall', pos: [-9.5, -3.2, -3], scale: 2, flip: true },
     { sprite: 'seaweedShort', pos: [-8, -3.4, -2], scale: 1.4 },
@@ -133,6 +186,17 @@ const LEVEL_1: Level = {
     { sprite: 'bubbleCluster', pos: [-3, 1, -2], scale: 1.2 },
     { sprite: 'bubbleCluster', pos: [6, -0.5, -1], scale: 1 },
   ],
+  // The nursery nest + eggs, revealed beneath the debris once it's dug clear.
+  reveal: {
+    sprite: 'nursery',
+    pos: [-6.5, -2.4, 0.6],
+    scale: 1.8,
+    afterObjective: 'l1-dig-silt',
+  },
+  envFact: {
+    text: 'Excess fine sediment is one of the most widespread pollutants in rivers: it blankets the gravel beds fish spawn on, starving the eggs of oxygen and smothering the young before they hatch.',
+    source: 'US EPA, National Rivers and Streams Assessment',
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +226,7 @@ const LEVEL_2: Level = {
       id: 'l2-cut-net',
       kind: 'clear',
       pos: [-6, -1, 0],
-      sprite: 'coral',
+      sprite: 'net',
       label: 'Cut the poacher’s net',
       hint: 'Swim into the net and press SPACE to cut it free',
       doneLine: 'Poachers I understand. This, less so.',
@@ -217,6 +281,18 @@ const LEVEL_2: Level = {
     { sprite: 'bubbleCluster', pos: [-2, 0.5, -2], scale: 1.1 },
     { sprite: 'bubbleCluster', pos: [5, 1.5, -1], scale: 0.9 },
   ],
+  // The trapped fry swim free once the net is cut.
+  fry: {
+    sprite: 'fry',
+    pos: [-6, -1, 0.4],
+    target: [-2, 1.5, 0.4],
+    count: 5,
+    afterObjective: 'l2-cut-net',
+  },
+  envFact: {
+    text: 'Abandoned and discarded fishing gear — “ghost nets” — makes up roughly a tenth of marine litter, about 640,000 tonnes each year, and keeps trapping and drowning fish long after it is lost.',
+    source: 'FAO & UNEP (2009), Abandoned, Lost or Otherwise Discarded Fishing Gear',
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -280,8 +356,8 @@ const LEVEL_3: Level = {
     },
   ],
   props: [
-    { sprite: 'rockGrey', pos: [9.5, -1, -1], scale: 5.5 },
-    { sprite: 'rockGrey', pos: [9.5, 3, -1], scale: 4 },
+    // NB: the outflow pipe + surface dock are drawn as real 3D geometry by the
+    // PipeDock component from `pipeDock` below — no fake rock props stand in now.
     { sprite: 'seaweedShort', pos: [-11, -3, -3], scale: 1.6 },
     { sprite: 'rockBrown', pos: [-9.5, -3.4, -2], scale: 1.8 },
     { sprite: 'citizenTetra', pos: [-7, -1, 0.5], scale: 0.9, flip: true },
@@ -299,12 +375,23 @@ const LEVEL_3: Level = {
     { sprite: 'bubbleCluster', pos: [8.5, 0, -0.5], scale: 1.4 },
     { sprite: 'bubbleCluster', pos: [8.8, 2.5, -0.5], scale: 1.2 },
   ],
+  // The outflow pipe climbs from the riverbed to a surface dock that dumps
+  // polluted water — the 'l3-follow-pipe' objective leads up to it.
+  pipeDock: {
+    pipe: [9.5, -1.5, -0.8],
+    dock: [10, 5.2, -0.8],
+  },
+  envFact: {
+    text: 'More than 80% of the world’s wastewater flows back into rivers and seas without being treated, carrying industrial chemicals and sewage into the water that people and wildlife depend on.',
+    source: 'UN World Water Development Report 2017 (UNESCO)',
+  },
 }
 
 // ---------------------------------------------------------------------------
 // LEVEL 4 — "Sleep With The Fishes" (BOSS)
-// Don Vitale on the dock ABOVE the waterline drops barrels; Reginald dodges and
-// hurls three back up to hit him. Water is beginning to clear.
+// Don Vitale, in a SCUBA suit, SWIMS the whole fight, hurling waste barrels;
+// Reginald dodges and homes three barrels back onto his live position. No static
+// boss prop — Boss.tsx renders the mobile scuba Vitale. Water is clearing.
 // ---------------------------------------------------------------------------
 const LEVEL_4: Level = {
   id: 'l4-sleep-with-the-fishes',
@@ -357,7 +444,8 @@ const LEVEL_4: Level = {
     },
   ],
   props: [
-    { sprite: 'bossDonMan', pos: [0, 6.2, -0.5], scale: 4.5 },
+    // No boss prop here — Boss.tsx renders the mobile scuba Vitale. These form the
+    // dock ceiling backdrop above the waterline.
     { sprite: 'rockGrey', pos: [-6, 5.4, -1], scale: 3 },
     { sprite: 'rockGrey', pos: [-6, 2, -1], scale: 3 },
     { sprite: 'rockGrey', pos: [6, 5.4, -1], scale: 3 },
@@ -375,6 +463,15 @@ const LEVEL_4: Level = {
     { sprite: 'bubbleCluster', pos: [3, 1, -1], scale: 1 },
     { sprite: 'bubbleCluster', pos: [-1, -1.5, -0.5], scale: 0.9 },
   ],
+  // The dock + pipe ceiling backdrop the whole fight plays out beneath.
+  pipeDock: {
+    pipe: [7, 5, -1.2],
+    dock: [0, 6.2, -1.2],
+  },
+  envFact: {
+    text: 'The world has lost about 35% of its wetlands since 1970 — freshwater habitats are vanishing three times faster than forests, drained and filled largely for development.',
+    source: 'Ramsar Convention, Global Wetland Outlook 2018',
+  },
 }
 
 export const LEVELS: Level[] = [LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4]

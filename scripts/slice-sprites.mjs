@@ -128,6 +128,78 @@ function fedoraManSvg() {
 </svg>`;
 }
 
+// Rasterise an SVG to a crisp (shape-rendering:crispEdges) PNG sprite.
+async function genSvg(key, svg) {
+  await sharp(Buffer.from(svg)).png().toFile(join(OUT, `${key}.png`));
+  console.log(`  ${key}: generated`);
+}
+
+// A small standalone lit cigar: brown stub + wrap band + bright ember + smoke.
+function cigarSvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="46" height="30" viewBox="0 0 46 30" shape-rendering="crispEdges">
+  <g opacity="0.7" fill="#e8eef2">
+    <rect x="6" y="2" width="3" height="3"/>
+    <rect x="11" y="6" width="3" height="3"/>
+    <rect x="9" y="9" width="2" height="2"/>
+  </g>
+  <rect x="14" y="14" width="24" height="8" fill="#6b4a2b"/>
+  <rect x="14" y="14" width="24" height="2" fill="#835c36"/>
+  <rect x="14" y="20" width="24" height="2" fill="#523721"/>
+  <rect x="32" y="14" width="6" height="8" fill="#8a6236"/>
+  <rect x="8" y="14" width="6" height="8" fill="#ff7a1a"/>
+  <rect x="8" y="16" width="4" height="4" fill="#ffd24a"/>
+</svg>`;
+}
+
+// A poacher's net: knotted diagonal cross-hatch mesh on transparent.
+function netSvg() {
+  const S = 112, step = 16, rope = '#d8cfa8', knot = '#a8986a';
+  let lines = '';
+  for (let d = -S; d <= S; d += step) {
+    lines += `<line x1="${d}" y1="0" x2="${d + S}" y2="${S}" stroke="${rope}" stroke-width="2"/>`;
+    lines += `<line x1="${d + S}" y1="0" x2="${d}" y2="${S}" stroke="${rope}" stroke-width="2"/>`;
+  }
+  let knots = '';
+  for (let y = 0; y <= S; y += step) for (let x = 0; x <= S; x += step)
+    knots += `<rect x="${x - 2}" y="${y - 2}" width="4" height="4" fill="${knot}"/>`;
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" shape-rendering="crispEdges">
+  <clipPath id="c"><rect x="0" y="0" width="${S}" height="${S}"/></clipPath>
+  <g clip-path="url(#c)">${lines}${knots}</g>
+</svg>`;
+}
+
+// A nursery: a shallow twig-nest ring cradling a cluster of pale eggs.
+function nurserySvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="112" height="80" viewBox="0 0 112 80" shape-rendering="crispEdges">
+  <ellipse cx="56" cy="52" rx="52" ry="24" fill="#7a5a34"/>
+  <ellipse cx="56" cy="50" rx="44" ry="18" fill="#5f4526"/>
+  <g fill="#8a6a3e">
+    <rect x="6" y="46" width="20" height="4"/><rect x="86" y="46" width="20" height="4"/>
+    <rect x="14" y="58" width="24" height="4"/><rect x="74" y="58" width="24" height="4"/>
+    <rect x="40" y="66" width="32" height="4"/>
+  </g>
+  <g fill="#eef0d8" stroke="#c7c9a8" stroke-width="1">
+    <ellipse cx="42" cy="46" rx="9" ry="11"/><ellipse cx="60" cy="44" rx="9" ry="11"/>
+    <ellipse cx="52" cy="54" rx="9" ry="11"/><ellipse cx="70" cy="52" rx="9" ry="11"/>
+  </g>
+  <g fill="#b9c48a"><rect x="40" y="42" width="3" height="3"/><rect x="58" y="40" width="3" height="3"/><rect x="50" y="50" width="3" height="3"/><rect x="68" y="48" width="3" height="3"/></g>
+</svg>`;
+}
+
+// A tiny baby fish (fry).
+function frySvg() {
+  return `<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 28 18" shape-rendering="crispEdges">
+  <path d="M22,9 L28,3 L28,15 Z" fill="#6fb8d8"/>
+  <ellipse cx="12" cy="9" rx="11" ry="6" fill="#9fd0e8"/>
+  <ellipse cx="12" cy="9" rx="11" ry="6" fill="none" stroke="#5a97b5" stroke-width="1"/>
+  <rect x="5" y="6" width="3" height="3" fill="#173040"/>
+</svg>`;
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
 
@@ -216,6 +288,53 @@ async function main() {
   // Man: constructed silhouette (reference is fouled by the city skyline).
   await sharp(Buffer.from(fedoraManSvg())).png().toFile(join(OUT, 'bossDonMan.png'));
   console.log('  bossDonMan: 360x640 (constructed)');
+
+  console.log('VITALE (v3 — persona + scuba diver):');
+  // Persona: the fedora/pinstripe mafia bust portrait (used when Vitale speaks).
+  const persona = await loadCleanSheet('vitale-persona.png');
+  await slice(persona, 'vitalePersona', [0, 0, persona.width, persona.height]);
+  // Scuba sheet: standing figure + three swim frames (all face RIGHT — a
+  // consistent direction; Boss.tsx flips as needed). Regions tuned to exclude
+  // the sheet's $ / rock / bubble decorations.
+  const scuba = await loadCleanSheet('vitale-sheet.png');
+  await slice(scuba, 'vitaleScubaStand', [78, 22, 112, 232]);
+  await slice(scuba, 'vitaleScuba1', [290, 40, 250, 98]);
+  await slice(scuba, 'vitaleScuba2', [290, 150, 250, 110]);
+  await slice(scuba, 'vitaleScuba3', [530, 72, 266, 150]);
+
+  console.log('REGINALD (v3 — hatless + cigar):');
+  // reginaldNoHat: erase the dark-grey top hat (top-left of the LEFT-facing
+  // idle frame) while keeping the green head/body/tail. Only grey/dark pixels
+  // inside the hat box are cleared; green head pixels are preserved.
+  {
+    const { data, info } = await sharp(join(OUT, 'reginaldIdle.png'))
+      .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const W = info.width, H = info.height, d = Buffer.from(data);
+    const bx = 80, by = 34, bw = 118, bh = 92;
+    for (let y = by; y < by + bh; y++) for (let x = bx; x < bx + bw; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i + 3] < 16) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+      const green = g > r + 8 && g > b + 8;
+      if (sat < 48 && !green) d[i + 3] = 0;
+    }
+    await sharp(d, { raw: { width: W, height: H, channels: 4 } })
+      .png().toFile(join(OUT, 'reginaldNoHat.png'));
+    console.log(`  reginaldNoHat: ${W}x${H}`);
+    // reginaldCigar: composite the lit cigar at his mouth (far-left snout).
+    const cig = await sharp(Buffer.from(cigarSvg())).png().toBuffer();
+    await sharp(d, { raw: { width: W, height: H, channels: 4 } })
+      .composite([{ input: cig, left: 8, top: 168 }])
+      .png().toFile(join(OUT, 'reginaldCigar.png'));
+    console.log(`  reginaldCigar: ${W}x${H}`);
+  }
+
+  console.log('GENERATED (v3 — cigar / net / nursery / fry):');
+  await genSvg('cigar', cigarSvg());
+  await genSvg('net', netSvg());
+  await genSvg('nursery', nurserySvg());
+  await genSvg('fry', frySvg());
 
   console.log('DONE');
 }

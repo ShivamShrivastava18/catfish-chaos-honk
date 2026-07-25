@@ -10,6 +10,9 @@ export function HUD() {
   const levelIndex = useGame((s) => s.levelIndex)
   const objectiveIndex = useGame((s) => s.objectiveIndex)
   const health = useGame((s) => s.riverHealth)
+  const playerHealth = useGame((s) => s.playerHealth)
+  const maxPlayerHealth = useGame((s) => s.maxPlayerHealth)
+  const lastChanceUsed = useGame((s) => s.lastChanceUsed)
 
   const level = LEVELS[levelIndex]
   if (!level) return null
@@ -54,6 +57,39 @@ export function HUD() {
             <div style={{ ...barFill, width: `${health}%` }} />
           </div>
         </div>
+
+        {level.isBoss ? (
+          <div style={{ marginTop: 12 }}>
+            <style>{healthKeyframes}</style>
+            <div style={{ ...barLabel, color: lastChanceUsed ? '#ff9d5c' : '#dff3ff' }}>
+              {lastChanceUsed ? 'Last stand · no hat, all nerve' : `Sir Reginald · vigour`}
+            </div>
+            <div style={heartsRow}>
+              {Array.from({ length: maxPlayerHealth }).map((_, i) => {
+                const alive = i < playerHealth
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      ...heart,
+                      ...(lastChanceUsed ? heartEmber : null),
+                      opacity: alive ? 1 : 0.22,
+                    }}
+                  >
+                    {lastChanceUsed ? (
+                      <span style={cigarWrap} aria-hidden>
+                        <span style={cigarStick} />
+                        <span style={cigarEmber} />
+                      </span>
+                    ) : (
+                      '♥'
+                    )}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
 
         {active ? <p style={objectiveHint}>Now: {active.label}</p> : null}
         <p style={controls}>WASD swim · SPACE grab / drop · H honk</p>
@@ -137,3 +173,40 @@ const objectiveHint: React.CSSProperties = {
   margin: '12px 0 0',
 }
 const controls: React.CSSProperties = { fontSize: 11, opacity: 0.5, marginTop: 6, fontStyle: 'italic' }
+
+// --- boss: Reginald's health (hearts, with a "last stand" cigar variant) ---
+const healthKeyframes = `
+@keyframes emberGlow { 0%,100% { box-shadow: 0 0 3px 1px rgba(255,120,40,0.8); } 50% { box-shadow: 0 0 6px 2px rgba(255,180,80,1); } }
+`
+const heartsRow: React.CSSProperties = { display: 'flex', gap: 8, marginTop: 4, alignItems: 'center' }
+const heart: React.CSSProperties = {
+  fontSize: 22,
+  lineHeight: 1,
+  color: '#ff5a6e',
+  textShadow: '0 0 6px rgba(255,90,110,0.7), 0 1px 2px rgba(0,0,0,0.6)',
+  transition: 'opacity 0.3s ease',
+  display: 'inline-flex',
+  width: 22,
+  height: 22,
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+const heartEmber: React.CSSProperties = { color: '#ff9d5c' }
+// A tiny CSS cigar (tan stick + glowing ember) — the desperate last-stand marker.
+const cigarWrap: React.CSSProperties = { position: 'relative', display: 'inline-flex', alignItems: 'center' }
+const cigarStick: React.CSSProperties = {
+  width: 16,
+  height: 5,
+  background: 'linear-gradient(180deg,#e9d3a3,#b9905a)',
+  borderRadius: 1,
+  display: 'inline-block',
+}
+const cigarEmber: React.CSSProperties = {
+  position: 'absolute',
+  right: -2,
+  width: 5,
+  height: 5,
+  borderRadius: '50%',
+  background: 'radial-gradient(circle,#fff2c4 0%,#ff8a2a 55%,#c23a10 100%)',
+  animation: 'emberGlow 1.1s ease-in-out infinite',
+}

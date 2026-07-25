@@ -12,6 +12,7 @@ import { BillboardSprite } from './BillboardSprite'
 import { SPRITES, type SpriteKey } from './sprites'
 import { LEVELS } from './levels'
 import { useGame } from './store'
+import { PipeDock } from './PipeDock'
 
 // Decor that grows up FROM the riverbed is planted by its bottom edge; the pipe
 // and dock pilings (rockGrey) are tall structures that read the same way.
@@ -193,15 +194,24 @@ function MurkHaze({ count = 150 }: { count?: number }) {
  */
 export function LevelEnvironment() {
   const levelIndex = useGame((s) => s.levelIndex)
+  const objectiveIndex = useGame((s) => s.objectiveIndex)
   const health = useGame((s) => s.riverHealth)
   const level = LEVELS[levelIndex] ?? LEVELS[0]
   const frac = health / 100
+
+  // L1: the heaped debris clump is dug clear once the reveal's afterObjective
+  // completes. Hide the debris props then so the nursery (drawn by Objectives)
+  // is exposed beneath. An objective is done once it sits behind the active one.
+  const reveal = level.reveal
+  const revealIdx = reveal ? level.objectives.findIndex((o) => o.id === reveal.afterObjective) : -1
+  const debrisCleared = revealIdx >= 0 && objectiveIndex > revealIdx
 
   return (
     <group>
       <Suspense fallback={null}>
         <FarBackdrop seed={levelIndex} frac={frac} />
         {level.props.map((p, i) => {
+          if (p.debris && debrisCleared) return null
           const bottom = BOTTOM_ANCHORED.has(p.sprite)
           const isPlant = PLANTS.has(p.sprite)
           const scale = (p.scale ?? 1) * (isPlant ? MathUtils.lerp(0.9, 1, frac) : 1)
@@ -219,6 +229,13 @@ export function LevelEnvironment() {
           )
         })}
       </Suspense>
+
+      {/* L3 reveal / L4 backdrop: the real 3D outflow pipe + surface dock. */}
+      {level.pipeDock && (
+        <Suspense fallback={null}>
+          <PipeDock pipe={level.pipeDock.pipe} dock={level.pipeDock.dock} />
+        </Suspense>
+      )}
 
       <PathLane key={`lane-${level.id}`} path={level.path} />
       <MurkHaze />

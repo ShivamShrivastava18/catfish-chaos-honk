@@ -29,7 +29,7 @@ export const CHARACTERS: Record<string, Character> = {
   barnaby: { id: 'barnaby', name: 'Old Barnaby', portrait: 'citizenCory' },
   paulie: { id: 'paulie', name: 'Big Paulie', portrait: 'henchPuffer' },
   della: { id: 'della', name: 'Della', portrait: 'citizenDiscus' },
-  vitale: { id: 'vitale', name: 'Don Vitale', portrait: 'bossDonMan' },
+  vitale: { id: 'vitale', name: 'Don Vitale', portrait: 'vitalePersona' },
 }
 
 // Concise line builders keep the scripts readable.
@@ -41,7 +41,7 @@ const reg = (text: string, portrait: SpriteKey = 'faceNeutral'): DialogueLine =>
 })
 const hen = (c: Character, text: string): DialogueLine => ({ speaker: 'hench', name: c.name, portrait: c.portrait, text })
 const cit = (c: Character, text: string): DialogueLine => ({ speaker: 'citizen', name: c.name, portrait: c.portrait, text })
-const villain = (text: string): DialogueLine => ({ speaker: 'boss', name: CHARACTERS.vitale.name, portrait: 'bossDonMan', text })
+const villain = (text: string): DialogueLine => ({ speaker: 'boss', name: CHARACTERS.vitale.name, portrait: 'vitalePersona', text })
 const narr = (text: string): DialogueLine => ({ speaker: 'narrator', name: '', portrait: null, text })
 
 // --- LEVEL 1 — "A Small Favour" (tutorial) ------------------------------------

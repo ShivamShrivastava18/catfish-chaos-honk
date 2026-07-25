@@ -12,6 +12,11 @@ export const SPRITES = {
   reginaldDead: '/sprites/reginaldDead.png',
   topHat: '/sprites/topHat.png',
 
+  // Reginald v3 — defiant last stand: hat erased, then with a lit cigar.
+  reginaldNoHat: '/sprites/reginaldNoHat.png',
+  reginaldCigar: '/sprites/reginaldCigar.png',
+  cigar: '/sprites/cigar.png',
+
   // Reginald face expressions (dialogue portraits + reactions).
   faceNeutral: '/sprites/faceNeutral.png',
   faceContent: '/sprites/faceContent.png',
@@ -39,6 +44,18 @@ export const SPRITES = {
   // Boss.
   bossDonMan: '/sprites/bossDonMan.png',
   bossDonFish: '/sprites/bossDonFish.png',
+
+  // Boss v3 — Don Vitale: fedora persona portrait + underwater SCUBA frames.
+  vitalePersona: '/sprites/vitalePersona.png',
+  vitaleScubaStand: '/sprites/vitaleScubaStand.png',
+  vitaleScuba1: '/sprites/vitaleScuba1.png',
+  vitaleScuba2: '/sprites/vitaleScuba2.png',
+  vitaleScuba3: '/sprites/vitaleScuba3.png',
+
+  // Level props v3.
+  net: '/sprites/net.png',
+  nursery: '/sprites/nursery.png',
+  fry: '/sprites/fry.png',
 
   // Decor.
   seaweedTall: '/sprites/seaweedTall.png',
@@ -76,6 +93,13 @@ export const HENCH_KEYS: SpriteKey[] = [
   'henchBetta',
   'henchPuffer',
   'henchAngel',
+];
+
+// Don Vitale's underwater swim cycle (v3 boss fight).
+export const BOSS_SCUBA_FRAMES: SpriteKey[] = [
+  'vitaleScuba1',
+  'vitaleScuba2',
+  'vitaleScuba3',
 ];
 
 export const DECOR_KEYS: SpriteKey[] = [

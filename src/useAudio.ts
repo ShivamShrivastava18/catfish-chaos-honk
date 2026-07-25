@@ -21,14 +21,28 @@ const LEVEL_PROFILES: LevelProfile[] = [
   { base: 240, sub: 36, lfo: 0.05 }, // L4 boss — dark + tense
 ]
 
+// Boss battle music: a driving low ostinato + a pulsing minor-arpeggio, sequenced
+// step by step with a small lookahead scheduler. Aligned 8-step loops.
+const BOSS_STEP_DUR = 0.12 // seconds per eighth-note step (~125 BPM feel)
+const BOSS_BASS = [55, 55, 65.41, 55, 73.42, 55, 61.74, 58.27] // A1 ostinato, minor tension
+const BOSS_ARP: (number | null)[] = [329.63, null, 261.63, null, 220, null, 261.63, null] // E4/C4/A3
+
 class AudioEngine {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
 
+  private ambBus: GainNode | null = null // ambience routes here so boss music can duck it
   private ambNodes: AudioNode[] = []
   private ambFilter: BiquadFilterNode | null = null
   private ambBase = 360
   private ambOn = false
+
+  // Boss battle music state.
+  private bossBus: GainNode | null = null
+  private bossTimer: ReturnType<typeof setInterval> | null = null
+  private bossStep = 0
+  private bossNextTime = 0
+  private bossOn = false
 
   /** Create/resume the context. Safe to call repeatedly; only acts on a gesture. */
   init() {
@@ -41,6 +55,10 @@ class AudioEngine {
       this.master = this.ctx.createGain()
       this.master.gain.value = 0.7
       this.master.connect(this.ctx.destination)
+      // Dedicated ambience bus — lets boss music duck the ambience cleanly.
+      this.ambBus = this.ctx.createGain()
+      this.ambBus.gain.value = 1
+      this.ambBus.connect(this.master)
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
   }
@@ -59,12 +77,13 @@ class AudioEngine {
    * level profile. Boss levels add a slow dissonant minor-second pad for menace.
    */
   startAmbience(level: number, isBoss: boolean, health: number) {
-    if (!this.ready()) return
+    if (!this.ready() || !this.ambBus) return
     if (this.ambOn) this.stopAmbience()
     const ctx = this.ctx!
     const now = ctx.currentTime
     const p = LEVEL_PROFILES[level] ?? LEVEL_PROFILES[0]
     this.ambBase = p.base
+    const bus = this.ambBus
 
     // Looping filtered white-noise current.
     const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate)
@@ -98,8 +117,8 @@ class AudioEngine {
     subGain.gain.value = 0
     subGain.gain.linearRampToValueAtTime(isBoss ? 0.09 : 0.06, now + 2)
 
-    noise.connect(lp).connect(noiseGain).connect(this.master!)
-    sub.connect(subGain).connect(this.master!)
+    noise.connect(lp).connect(noiseGain).connect(bus)
+    sub.connect(subGain).connect(bus)
     noise.start()
     sub.start()
     lfo.start()
@@ -113,7 +132,7 @@ class AudioEngine {
       const padFilter = ctx.createBiquadFilter()
       padFilter.type = 'lowpass'
       padFilter.frequency.value = 700
-      padFilter.connect(padGain).connect(this.master!)
+      padFilter.connect(padGain).connect(bus)
 
       const pulse = ctx.createOscillator()
       pulse.frequency.value = 0.5
@@ -167,6 +186,111 @@ class AudioEngine {
     this.ambFilter = null
     this.ambOn = false
   }
+
+  // --- boss battle music -----------------------------------------------------
+
+  /** Duck the ambience bus down/back over `secs` (1 = full, 0.4 = ducked). */
+  private setAmbDuck(target: number, secs: number) {
+    if (!this.ambBus || !this.ctx) return
+    const now = this.ctx.currentTime
+    this.ambBus.gain.cancelScheduledValues(now)
+    this.ambBus.gain.linearRampToValueAtTime(target, now + secs)
+  }
+
+  /** Schedule one step of the boss ostinato + arpeggio at absolute `time`. */
+  private scheduleBossStep(step: number, time: number) {
+    const ctx = this.ctx!
+    const bus = this.bossBus!
+
+    // Driving low bass note.
+    const bass = BOSS_BASS[step % BOSS_BASS.length]
+    const bo = ctx.createOscillator()
+    bo.type = 'sawtooth'
+    bo.frequency.setValueAtTime(bass, time)
+    const blp = ctx.createBiquadFilter()
+    blp.type = 'lowpass'
+    blp.frequency.setValueAtTime(520, time)
+    blp.frequency.exponentialRampToValueAtTime(180, time + 0.11)
+    const bg = ctx.createGain()
+    bg.gain.setValueAtTime(0.0001, time)
+    bg.gain.exponentialRampToValueAtTime(0.24, time + 0.008)
+    bg.gain.exponentialRampToValueAtTime(0.0001, time + 0.11)
+    bo.connect(blp).connect(bg).connect(bus)
+    bo.start(time)
+    bo.stop(time + 0.13)
+
+    // Pulsing minor-arpeggio accent.
+    const arp = BOSS_ARP[step % BOSS_ARP.length]
+    if (arp) {
+      const ao = ctx.createOscillator()
+      ao.type = 'triangle'
+      ao.frequency.setValueAtTime(arp, time)
+      const alp = ctx.createBiquadFilter()
+      alp.type = 'lowpass'
+      alp.frequency.value = 1600
+      const ag = ctx.createGain()
+      ag.gain.setValueAtTime(0.0001, time)
+      ag.gain.exponentialRampToValueAtTime(0.07, time + 0.01)
+      ag.gain.exponentialRampToValueAtTime(0.0001, time + 0.16)
+      ao.connect(alp).connect(ag).connect(bus)
+      ao.start(time)
+      ao.stop(time + 0.18)
+    }
+  }
+
+  private bossTick = () => {
+    if (!this.ctx || !this.bossOn) return
+    const ahead = this.ctx.currentTime + 0.14
+    while (this.bossNextTime < ahead) {
+      this.scheduleBossStep(this.bossStep, this.bossNextTime)
+      this.bossNextTime += BOSS_STEP_DUR
+      this.bossStep++
+    }
+  }
+
+  /** Kick off the looping boss battle music and duck the ambience under it. */
+  startBossMusic() {
+    if (!this.ready() || this.bossOn) return
+    const ctx = this.ctx!
+    const now = ctx.currentTime
+    this.bossBus = ctx.createGain()
+    this.bossBus.gain.setValueAtTime(0.0001, now)
+    this.bossBus.gain.linearRampToValueAtTime(0.85, now + 1)
+    this.bossBus.connect(this.master!)
+    this.setAmbDuck(0.4, 0.8)
+    this.bossOn = true
+    this.bossStep = 0
+    this.bossNextTime = now + 0.08
+    this.bossTick()
+    this.bossTimer = setInterval(this.bossTick, 25)
+  }
+
+  /** Stop the boss music (win/leave) and restore ambience. */
+  stopBossMusic() {
+    if (!this.bossOn) return
+    this.bossOn = false
+    if (this.bossTimer) {
+      clearInterval(this.bossTimer)
+      this.bossTimer = null
+    }
+    this.setAmbDuck(1, 0.8)
+    if (this.bossBus && this.ctx) {
+      const now = this.ctx.currentTime
+      const bus = this.bossBus
+      bus.gain.cancelScheduledValues(now)
+      bus.gain.linearRampToValueAtTime(0.0001, now + 0.5)
+      setTimeout(() => {
+        try {
+          bus.disconnect()
+        } catch {
+          /* already gone */
+        }
+      }, 700)
+    }
+    this.bossBus = null
+  }
+
+  // --- one-shot SFX ----------------------------------------------------------
 
   /** Very short soft tick — one typewriter character in a dialogue bubble. */
   blip() {
@@ -247,6 +371,139 @@ class AudioEngine {
     osc.stop(now + 0.3)
   }
 
+  /** Whooshing barrel throw — a rising airy sweep as Reginald hurls it up. */
+  throwWhoosh() {
+    if (!this.ready()) return
+    const ctx = this.ctx!
+    const now = ctx.currentTime
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+    const noise = ctx.createBufferSource()
+    noise.buffer = buffer
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.Q.value = 1.4
+    bp.frequency.setValueAtTime(300, now)
+    bp.frequency.exponentialRampToValueAtTime(1900, now + 0.4)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, now)
+    g.gain.exponentialRampToValueAtTime(0.22, now + 0.08)
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.45)
+    noise.connect(bp).connect(g).connect(this.master!)
+    noise.start(now)
+    noise.stop(now + 0.5)
+  }
+
+  /**
+   * Last-chance revive: the top hat floats away (upward whoosh) then a
+   * lighter-flick click + cigar sizzle as Reginald makes his defiant stand.
+   */
+  revive() {
+    if (!this.ready()) return
+    const ctx = this.ctx!
+    const now = ctx.currentTime
+
+    // Hat float-off — a soft upward filtered-noise whoosh.
+    const hatBuf = ctx.createBuffer(1, ctx.sampleRate * 0.7, ctx.sampleRate)
+    const hatData = hatBuf.getChannelData(0)
+    for (let i = 0; i < hatData.length; i++) hatData[i] = Math.random() * 2 - 1
+    const hatNoise = ctx.createBufferSource()
+    hatNoise.buffer = hatBuf
+    const hatBp = ctx.createBiquadFilter()
+    hatBp.type = 'bandpass'
+    hatBp.Q.value = 2
+    hatBp.frequency.setValueAtTime(400, now)
+    hatBp.frequency.exponentialRampToValueAtTime(1500, now + 0.6)
+    const hatG = ctx.createGain()
+    hatG.gain.setValueAtTime(0.0001, now)
+    hatG.gain.exponentialRampToValueAtTime(0.16, now + 0.12)
+    hatG.gain.exponentialRampToValueAtTime(0.0001, now + 0.65)
+    hatNoise.connect(hatBp).connect(hatG).connect(this.master!)
+    hatNoise.start(now)
+    hatNoise.stop(now + 0.7)
+
+    // Lighter flick — a tiny sharp click.
+    const flickT = now + 0.55
+    const flick = ctx.createOscillator()
+    flick.type = 'square'
+    flick.frequency.setValueAtTime(2400, flickT)
+    const flickG = ctx.createGain()
+    flickG.gain.setValueAtTime(0.0001, flickT)
+    flickG.gain.exponentialRampToValueAtTime(0.12, flickT + 0.003)
+    flickG.gain.exponentialRampToValueAtTime(0.0001, flickT + 0.03)
+    flick.connect(flickG).connect(this.master!)
+    flick.start(flickT)
+    flick.stop(flickT + 0.04)
+
+    // Cigar sizzle — brief high crackle right after the flick.
+    const sizT = flickT + 0.05
+    const sizBuf = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate)
+    const sizData = sizBuf.getChannelData(0)
+    for (let i = 0; i < sizData.length; i++) {
+      sizData[i] = (Math.random() * 2 - 1) * (Math.random() < 0.3 ? 1 : 0.3)
+    }
+    const siz = ctx.createBufferSource()
+    siz.buffer = sizBuf
+    const sizHp = ctx.createBiquadFilter()
+    sizHp.type = 'highpass'
+    sizHp.frequency.value = 3800
+    const sizG = ctx.createGain()
+    sizG.gain.setValueAtTime(0.0001, sizT)
+    sizG.gain.exponentialRampToValueAtTime(0.08, sizT + 0.02)
+    sizG.gain.exponentialRampToValueAtTime(0.0001, sizT + 0.32)
+    siz.connect(sizHp).connect(sizG).connect(this.master!)
+    siz.start(sizT)
+    siz.stop(sizT + 0.35)
+  }
+
+  /** Soft bright bell chime — the nursery is revealed beneath the silt. */
+  chime() {
+    if (!this.ready()) return
+    const ctx = this.ctx!
+    const start = ctx.currentTime + 0.02
+    const notes = [1318.51, 1567.98, 2093.0] // E6 G6 C7
+    notes.forEach((freq, i) => {
+      const t = start + i * 0.09
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(0.14, t + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9)
+      osc.connect(g).connect(this.master!)
+      osc.start(t)
+      osc.stop(t + 0.95)
+    })
+  }
+
+  /** Bubbly flurry — the freed fry swim out of the cut net. */
+  bubbles() {
+    if (!this.ready()) return
+    const ctx = this.ctx!
+    const start = ctx.currentTime
+    const count = 7
+    for (let i = 0; i < count; i++) {
+      const t = start + i * 0.06 + Math.random() * 0.03
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      const f0 = 500 + Math.random() * 500
+      osc.frequency.setValueAtTime(f0, t)
+      osc.frequency.exponentialRampToValueAtTime(f0 * 2.2, t + 0.06) // rising "bloop"
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = 2600
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(0.0001, t)
+      g.gain.exponentialRampToValueAtTime(0.1, t + 0.012)
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1)
+      osc.connect(lp).connect(g).connect(this.master!)
+      osc.start(t)
+      osc.stop(t + 0.12)
+    }
+  }
+
   /** Comedic square-wave honk. */
   honk() {
     if (!this.ready()) return
@@ -294,6 +551,43 @@ class AudioEngine {
       osc.start(now)
       osc.stop(now + 1.55)
     })
+  }
+
+  /** Dark descending sting + low boom — GAME OVER (second death). */
+  gameOver() {
+    if (!this.ready()) return
+    const ctx = this.ctx!
+    const now = ctx.currentTime + 0.02
+    const chord = [146.83, 174.61, 220] // D3 F3 A3 — minor, bent downward
+    chord.forEach((freq) => {
+      const osc = ctx.createOscillator()
+      osc.type = 'sawtooth'
+      osc.frequency.setValueAtTime(freq, now)
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + 1.6)
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.setValueAtTime(900, now)
+      lp.frequency.exponentialRampToValueAtTime(240, now + 1.6)
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(0.0001, now)
+      g.gain.exponentialRampToValueAtTime(0.2, now + 0.05)
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 1.8)
+      osc.connect(lp).connect(g).connect(this.master!)
+      osc.start(now)
+      osc.stop(now + 1.85)
+    })
+    // Low boom underneath.
+    const boom = ctx.createOscillator()
+    boom.type = 'sine'
+    boom.frequency.setValueAtTime(90, now)
+    boom.frequency.exponentialRampToValueAtTime(38, now + 1)
+    const bg = ctx.createGain()
+    bg.gain.setValueAtTime(0.0001, now)
+    bg.gain.exponentialRampToValueAtTime(0.32, now + 0.03)
+    bg.gain.exponentialRampToValueAtTime(0.0001, now + 1.2)
+    boom.connect(bg).connect(this.master!)
+    boom.start(now)
+    boom.stop(now + 1.25)
   }
 
   /** Short bright cadence — one level solved (not the whole game). */
@@ -366,8 +660,10 @@ function isBossLevel(index: number): boolean {
  * Wires procedural audio to the game store. Mount once at app root (via
  * <AudioController/>). Auto-inits the AudioContext on the first user gesture,
  * then drives: per-level ambience (shifting with level + riverHealth), a boss
- * music sting, a level-clear jingle, a full-game win jingle, comedic honks, and
- * blorp/splash on objective completion (splash on boss hits).
+ * sting + looping boss battle music (ducking ambience), a level-clear jingle, a
+ * full-game win jingle, comedic honks, objective/boss-hit SFX, a nursery-reveal
+ * chime, a fry-release bubble flurry, the last-chance revive cues, and a
+ * game-over sting.
  */
 export function useAudio() {
   useEffect(() => {
@@ -381,6 +677,8 @@ export function useAudio() {
     let prevLevel = s0.levelIndex
     let prevObjIndex = s0.objectiveIndex
     let prevHealth = s0.riverHealth
+    let prevPlayerHealth = s0.playerHealth
+    let prevReviving = s0.reviving
 
     const unsub = useGame.subscribe((s) => {
       // A new level was loaded — reset objective tracking to avoid false hits.
@@ -390,6 +688,10 @@ export function useAudio() {
       }
 
       if (s.gamePhase !== prevPhase) {
+        const from = prevPhase
+        // Leaving the fight always kills the boss battle music.
+        if (from === 'playing') engine.stopBossMusic()
+
         switch (s.gamePhase) {
           case 'intro': {
             const boss = isBossLevel(s.levelIndex)
@@ -397,6 +699,9 @@ export function useAudio() {
             if (boss) engine.bossSting()
             break
           }
+          case 'playing':
+            if (isBossLevel(s.levelIndex)) engine.startBossMusic()
+            break
           case 'levelclear':
             engine.stopAmbience()
             engine.levelClear()
@@ -407,6 +712,8 @@ export function useAudio() {
             break
           case 'title':
             engine.stopAmbience()
+            // playing -> title only happens on the second death (GAME OVER reset).
+            if (from === 'playing') engine.gameOver()
             break
         }
         prevPhase = s.gamePhase
@@ -415,10 +722,32 @@ export function useAudio() {
       // Objective completed (index advances during 'playing', and once more on
       // the final objective as the phase flips to 'outro').
       if (s.objectiveIndex > prevObjIndex && (s.gamePhase === 'playing' || s.gamePhase === 'outro')) {
-        if (isBossLevel(s.levelIndex)) engine.splash()
-        else engine.blorp()
+        const completed = prevObjIndex
+        if (isBossLevel(s.levelIndex)) {
+          engine.splash()
+        } else if (s.levelIndex === 0 && completed === 0) {
+          engine.chime() // L1: nursery revealed beneath the dug-out silt
+        } else if (s.levelIndex === 1 && completed === 0) {
+          engine.bubbles() // L2: fry swim out of the cut net
+        } else {
+          engine.blorp()
+        }
         prevObjIndex = s.objectiveIndex
       }
+
+      // Reginald took a hit during the boss fight (health dropped without a revive).
+      if (
+        s.playerHealth < prevPlayerHealth &&
+        s.gamePhase === 'playing' &&
+        isBossLevel(s.levelIndex)
+      ) {
+        engine.throwWhoosh()
+      }
+      prevPlayerHealth = s.playerHealth
+
+      // Last-chance revive: hat floats off, lighter flicks, cigar sizzles.
+      if (s.reviving && !prevReviving) engine.revive()
+      prevReviving = s.reviving
 
       if (s.riverHealth !== prevHealth) {
         engine.setHealth(s.riverHealth)
@@ -434,6 +763,7 @@ export function useAudio() {
     return () => {
       window.removeEventListener('pointerdown', onGesture)
       window.removeEventListener('keydown', onGesture)
+      engine.stopBossMusic()
       unsub()
     }
   }, [])
