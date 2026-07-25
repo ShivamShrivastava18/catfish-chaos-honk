@@ -466,7 +466,7 @@ export function Boss() {
             frames={SCUBA_URLS}
             fps={6}
             scale={BOSS_SCALE}
-            flipX={bossFlip}
+            flipX={!bossFlip}
           />
         </Suspense>
 

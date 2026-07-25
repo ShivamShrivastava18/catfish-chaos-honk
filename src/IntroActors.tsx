@@ -40,16 +40,8 @@ function Actor({ def }: { def: ActorDef }) {
   const started = useRef(false)
   const bobPhase = useRef(Math.random() * Math.PI * 2)
 
-  // Native facing resolution. `def.flipX` is the correct flip when the actor
-  // faces TOWARD Reginald at rest; from that we recover the flip value that
-  // makes the sprite face RIGHT, regardless of the sheet's native direction.
-  // (home left of Reginald => Reginald is to the right => facing Reginald means
-  //  facing right, so def.flipX already IS flip-for-right; otherwise it's the
-  //  inverse.)
-  const flipForRight = useMemo(
-    () => (def.offset[0] < 0 ? def.flipX : !def.flipX),
-    [def],
-  )
+  // All the fish sheets (henchmen + citizens) are drawn facing RIGHT natively,
+  // so mirror only when we want the actor to face LEFT.
 
   // Live horizontal facing: start facing the way we swim in (toward the home slot).
   const [facingRight, setFacingRight] = useState(def.offset[0] < 0)
@@ -116,7 +108,7 @@ function Actor({ def }: { def: ActorDef }) {
         <BillboardSprite
           url={SPRITES[def.key]}
           scale={def.scale}
-          flipX={facingRight ? flipForRight : !flipForRight}
+          flipX={!facingRight}
         />
       </Suspense>
     </group>
@@ -144,11 +136,9 @@ export function IntroActors() {
     if (!level) return []
     const defs: ActorDef[] = []
     if (level.isBoss) {
-      // Boss intro: Don Vitale drops in from the dock above; his henchman flanks.
-      defs.push({ key: 'vitaleScubaStand', speaker: 'boss', from: 'top', offset: [2.4, 2.4, 0.6], flipX: false, scale: 3 })
-      if (SPRITES[level.hench]) {
-        defs.push({ key: level.hench, speaker: 'hench', from: 'left', offset: [-3.6, -0.4, 0.5], flipX: true, scale: 2.4 })
-      }
+      // Boss intro: just Don Vitale, dropping in from the dock above. No henchman
+      // flanking — the final confrontation is Reginald vs. Vitale, one on one.
+      defs.push({ key: 'vitaleScubaStand', speaker: 'boss', from: 'top', offset: [0, 2.2, 0.6], flipX: false, scale: 2.6 })
       return defs
     }
     if (SPRITES[level.hench]) {
