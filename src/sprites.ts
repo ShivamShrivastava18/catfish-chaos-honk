@@ -66,6 +66,35 @@ export const SPRITES = {
   coral: '/sprites/coral.png',
   bubbleCluster: '/sprites/bubbleCluster.png',
 
+  // v4 environment decor — procedural pixel art for layered open-world levels.
+  kelpA: '/sprites/kelpA.png',
+  kelpB: '/sprites/kelpB.png',
+  kelpC: '/sprites/kelpC.png',
+  coralA: '/sprites/coralA.png',
+  coralB: '/sprites/coralB.png',
+  coralFan: '/sprites/coralFan.png',
+  rockBig: '/sprites/rockBig.png',
+  rockFlat: '/sprites/rockFlat.png',
+  rockPile: '/sprites/rockPile.png',
+  sunkenPillar: '/sprites/sunkenPillar.png',
+  sunkenTire: '/sprites/sunkenTire.png',
+  sunkenCrate: '/sprites/sunkenCrate.png',
+  driftwood: '/sprites/driftwood.png',
+  shellCluster: '/sprites/shellCluster.png',
+  anemone: '/sprites/anemone.png',
+  lilyPadBig: '/sprites/lilyPadBig.png',
+  bgReeds: '/sprites/bgReeds.png',
+  bgRidge: '/sprites/bgRidge.png',
+  lightShaftSoft: '/sprites/lightShaftSoft.png',
+  causticTile: '/sprites/causticTile.png',
+
+  // v4 UI assets — bubble health sprites + gentleman's-salvage ornaments.
+  bubbleFull: '/sprites/bubbleFull.png',
+  bubbleEmpty: '/sprites/bubbleEmpty.png',
+  bubbleCigar: '/sprites/bubbleCigar.png',
+  panelCorner: '/sprites/panelCorner.png',
+  ribbon: '/sprites/ribbon.png',
+
   // Back-compat aliases for the pre-v2 scene (map onto v2 assets). Safe to drop
   // once every consumer references the contract keys above.
   reginaldFront: '/sprites/reginaldIdle.png',
@@ -110,4 +139,38 @@ export const DECOR_KEYS: SpriteKey[] = [
   'lilyPad',
   'coral',
   'bubbleCluster',
+];
+
+// v4 open-world environment decor. Split by layer role so scenes can compose a
+// far BACKGROUND (bgReeds/bgRidge), a parallax MID and a detailed FOREGROUND.
+export const ENV_DECOR_KEYS: SpriteKey[] = [
+  'kelpA',
+  'kelpB',
+  'kelpC',
+  'coralA',
+  'coralB',
+  'coralFan',
+  'rockBig',
+  'rockFlat',
+  'rockPile',
+  'sunkenPillar',
+  'sunkenTire',
+  'sunkenCrate',
+  'driftwood',
+  'shellCluster',
+  'anemone',
+  'lilyPadBig',
+  'bgReeds',
+  'bgRidge',
+  'lightShaftSoft',
+  'causticTile',
+];
+
+// v4 HUD / card ornament + bubble-health sprites.
+export const UI_KEYS: SpriteKey[] = [
+  'bubbleFull',
+  'bubbleEmpty',
+  'bubbleCigar',
+  'panelCorner',
+  'ribbon',
 ];

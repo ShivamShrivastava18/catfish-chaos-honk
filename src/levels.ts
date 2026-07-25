@@ -1,6 +1,10 @@
-// levels.ts — the four hand-designed levels of Catfish Chaos: HONK! v2.
-// Each level has a DENSE, deliberate props[] layout, a readable path[] lane, and
-// an ORDERED objectives[] breadcrumb (only the active objective is targetable).
+// levels.ts — the four hand-designed levels of Catfish Chaos: HONK! v4.
+// Each level is now an OPEN-WORLD, LAYERED scene: a far BACKGROUND silhouette
+// band (bgRidge / bgReeds / distant kelp / god-rays), a parallax MID band of
+// kelp forests, coral fields and sunken-ruin clusters, and a detailed FOREGROUND.
+// Decor is grouped into deliberate CLUSTERS / points-of-interest across a wide
+// area — never a uniform scatter. The readable objectives[] breadcrumb and the
+// glowing path[] lane still thread straight through the middle of it all.
 import type { SpriteKey } from './sprites'
 import {
   L1_INTRO,
@@ -27,11 +31,34 @@ export interface Objective {
   doneLine?: string
 }
 
+/**
+ * Parallax band a prop belongs to. The renderer camera-parallaxes each band by a
+ * different amount, giving the scene real depth:
+ *   'mid' — kelp forests, coral fields, sunken ruins (the bulk of the world).
+ *   'fg'  — detailed near decor, nearly locked to the play plane.
+ * The BACKGROUND band (far silhouettes) lives in Level.background[] and is always
+ * treated as the slowest, farthest layer, so its items need no `layer` field.
+ */
+export type PropLayer = 'mid' | 'fg'
+
+/**
+ * A placed decor billboard.
+ *   pos      — true world position; z sets real depth, so bg items sit deepest.
+ *   scale    — size multiplier for the billboard.
+ *   flip     — mirror horizontally (vary a repeated silhouette).
+ *   layer    — MID (default) or FG parallax band, for props in `props[]`.
+ *   parallax — optional 0..1 override of the band default (0 = fixed/farthest,
+ *              1 = locked to the play plane). Background items default ~0.2,
+ *              mid ~0.6, fg ~0.9 when this is omitted.
+ *   debris   — part of a clearable clump; hidden once its objective completes.
+ */
 export interface PropPlacement {
   sprite: SpriteKey
   pos: [number, number, number]
   scale?: number
   flip?: boolean
+  layer?: PropLayer
+  parallax?: number
   debris?: boolean // part of a clearable clump; hidden once its `revealAfter` objective is done
 }
 
@@ -83,6 +110,12 @@ export interface Level {
   intro: DialogueLine[]
   outro: DialogueLine[]
   objectives: Objective[]
+  // The far SILHOUETTE band — bgRidge / bgReeds / distant kelp / god-rays. Rendered
+  // deepest, slowest parallax; sets the horizon and the "there is more world back
+  // there" feeling. Deliberately authored, not scattered.
+  background: PropPlacement[]
+  // The MID + FOREGROUND world — kelp forests, coral fields, sunken-ruin clusters,
+  // points of interest. Each prop's `layer` picks its parallax band.
   props: PropPlacement[]
   path: [number, number][]
   envFact: EnvFact // REAL, attributed fact matched to the level theme (shown on chapter-clear)
@@ -93,7 +126,8 @@ export interface Level {
 
 // ---------------------------------------------------------------------------
 // LEVEL 1 — "A Small Favour" (TUTORIAL)
-// Silty, murky green water. Teach swim / grab / deliver / the glowing ring.
+// Biome: silty nursery FLATS. Soft green murk, gentle terraced beds, kelp fringes
+// and a coral patch behind the buried nursery. Wide, calm, easy to read.
 // ---------------------------------------------------------------------------
 const LEVEL_1: Level = {
   id: 'l1-small-favour',
@@ -153,38 +187,77 @@ const LEVEL_1: Level = {
       doneLine: 'Stay close, little ones.',
     },
   ],
+  // FAR BACKGROUND — a distant seabed ridge, faint reed strips, silhouette kelp on
+  // the horizon, and two soft god-rays sliding down through the silty water.
+  background: [
+    { sprite: 'bgRidge', pos: [-8, -3.5, -13], scale: 6.5, parallax: 0.18 },
+    { sprite: 'bgRidge', pos: [8, -3.6, -13], scale: 6.5, flip: true, parallax: 0.18 },
+    { sprite: 'bgReeds', pos: [-14, -3.3, -11], scale: 5, parallax: 0.24 },
+    { sprite: 'bgReeds', pos: [0, -3.3, -11.5], scale: 5.2, parallax: 0.22 },
+    { sprite: 'bgReeds', pos: [14, -3.3, -11], scale: 5, flip: true, parallax: 0.24 },
+    { sprite: 'kelpB', pos: [-18, -3.5, -10], scale: 3.2, parallax: 0.3 },
+    { sprite: 'kelpC', pos: [-3, -3.5, -10], scale: 3, parallax: 0.3 },
+    { sprite: 'kelpA', pos: [12, -3.5, -10], scale: 3.4, flip: true, parallax: 0.3 },
+    { sprite: 'kelpB', pos: [19, -3.5, -9.5], scale: 3, parallax: 0.32 },
+    { sprite: 'lightShaftSoft', pos: [-6, 2, -9], scale: 6, parallax: 0.1 },
+    { sprite: 'lightShaftSoft', pos: [7, 2.5, -9], scale: 7, parallax: 0.1 },
+  ],
   props: [
     // DEBRIS CLUMP — heaped densely over the nursery at [-6.5,-2.4]. Cleared by
     // the 'l1-dig-silt' objective; hidden afterward to REVEAL the nursery beneath.
-    { sprite: 'rockBrown', pos: [-6.8, -2.3, 0.2], scale: 1.2, debris: true },
-    { sprite: 'rockGrey', pos: [-6.2, -2.5, 0.3], scale: 1.1, debris: true, flip: true },
-    { sprite: 'rockBrown', pos: [-6.5, -1.9, 0.4], scale: 1, debris: true },
-    { sprite: 'rockGrey', pos: [-7.1, -2.7, 0.1], scale: 0.9, debris: true },
-    { sprite: 'rockBrown', pos: [-5.9, -2.1, 0.3], scale: 0.95, debris: true, flip: true },
-    { sprite: 'rockGrey', pos: [-6.9, -1.7, 0.5], scale: 0.8, debris: true },
-    { sprite: 'coral', pos: [-6.3, -2.9, 0.2], scale: 0.9, debris: true },
-    { sprite: 'rockBrown', pos: [-7.3, -2.2, 0.35], scale: 0.85, debris: true },
-    { sprite: 'rockGrey', pos: [-5.7, -2.6, 0.25], scale: 0.9, debris: true, flip: true },
-    { sprite: 'rockBrown', pos: [-6.6, -2.4, 0.55], scale: 0.8, debris: true },
-    { sprite: 'seaweedTall', pos: [-11, -3, -3], scale: 2.4 },
-    { sprite: 'seaweedTall', pos: [-9.5, -3.2, -3], scale: 2, flip: true },
-    { sprite: 'seaweedShort', pos: [-8, -3.4, -2], scale: 1.4 },
-    { sprite: 'rockBrown', pos: [-6.5, -3.6, -1], scale: 1.6 },
-    { sprite: 'rockGrey', pos: [-4, -3.6, -2], scale: 1.2 },
-    { sprite: 'coral', pos: [-2, -3.2, -3], scale: 1.5 },
-    { sprite: 'seaweedTall', pos: [0, -3, -3], scale: 2.2, flip: true },
-    { sprite: 'seaweedShort', pos: [1.6, -3.4, -2], scale: 1.3 },
-    { sprite: 'rockBrown', pos: [3.5, -3.6, -1], scale: 1.4 },
-    { sprite: 'coral', pos: [5.5, -3.3, -3], scale: 1.6 },
-    { sprite: 'seaweedTall', pos: [7.5, -3, -3], scale: 2.3 },
-    { sprite: 'seaweedShort', pos: [9, -3.3, -2], scale: 1.5, flip: true },
-    { sprite: 'coral', pos: [9, 0.4, -0.5], scale: 1.4 },
-    { sprite: 'rockGrey', pos: [10.5, -3.6, -2], scale: 1.6 },
-    { sprite: 'lilyPad', pos: [-7, 5.6, -2], scale: 2 },
-    { sprite: 'lilyPad', pos: [2, 5.8, -3], scale: 2.4, flip: true },
-    { sprite: 'lilyPad', pos: [8, 5.6, -2], scale: 1.8 },
+    { sprite: 'rockBrown', pos: [-6.8, -2.3, 0.2], scale: 1.2, layer: 'fg', debris: true },
+    { sprite: 'rockGrey', pos: [-6.2, -2.5, 0.3], scale: 1.1, layer: 'fg', debris: true, flip: true },
+    { sprite: 'rockBrown', pos: [-6.5, -1.9, 0.4], scale: 1, layer: 'fg', debris: true },
+    { sprite: 'rockGrey', pos: [-7.1, -2.7, 0.1], scale: 0.9, layer: 'fg', debris: true },
+    { sprite: 'rockBrown', pos: [-5.9, -2.1, 0.3], scale: 0.95, layer: 'fg', debris: true, flip: true },
+    { sprite: 'rockGrey', pos: [-6.9, -1.7, 0.5], scale: 0.8, layer: 'fg', debris: true },
+    { sprite: 'coralA', pos: [-6.3, -2.9, 0.2], scale: 0.9, layer: 'fg', debris: true },
+    { sprite: 'rockBrown', pos: [-7.3, -2.2, 0.35], scale: 0.85, layer: 'fg', debris: true },
+    { sprite: 'rockGrey', pos: [-5.7, -2.6, 0.25], scale: 0.9, layer: 'fg', debris: true, flip: true },
+    { sprite: 'rockBrown', pos: [-6.6, -2.4, 0.55], scale: 0.8, layer: 'fg', debris: true },
+
+    // MID — CLUSTER A: west kelp forest (a wall of seaweed you enter from).
+    { sprite: 'kelpA', pos: [-16, -3.3, -5], scale: 2.6 },
+    { sprite: 'kelpB', pos: [-14.5, -3.3, -4.5], scale: 2.9, flip: true },
+    { sprite: 'kelpC', pos: [-13, -3.3, -5.5], scale: 2.4 },
+    { sprite: 'kelpA', pos: [-11.8, -3.3, -4], scale: 2.7, flip: true },
+    { sprite: 'anemone', pos: [-15, -3.5, -4], scale: 1.2 },
+    { sprite: 'shellCluster', pos: [-13.5, -3.5, -3.5], scale: 1 },
+    // MID — CLUSTER B: coral patch behind the nursery (the pretty bit worth saving).
+    { sprite: 'coralA', pos: [-4, -3.4, -5], scale: 1.8 },
+    { sprite: 'coralFan', pos: [-2.8, -3.4, -4.5], scale: 2, flip: true },
+    { sprite: 'coralB', pos: [-1.5, -3.4, -5.2], scale: 1.6 },
+    { sprite: 'anemone', pos: [-3.2, -3.5, -4], scale: 1 },
+    { sprite: 'shellCluster', pos: [-2, -3.5, -3.8], scale: 0.9 },
+    // MID — CLUSTER C: a rocky terrace mid-river.
+    { sprite: 'rockPile', pos: [3.5, -3.4, -5], scale: 2 },
+    { sprite: 'rockFlat', pos: [5, -3.5, -4.5], scale: 1.8, flip: true },
+    { sprite: 'rockBig', pos: [6.5, -3.4, -5.5], scale: 2.2 },
+    { sprite: 'kelpB', pos: [4.2, -3.3, -4], scale: 2.3 },
+    // MID — CLUSTER D: east kelp fringe + a sunken-tire point of interest.
+    { sprite: 'kelpA', pos: [9.5, -3.3, -5], scale: 2.6 },
+    { sprite: 'kelpC', pos: [11, -3.3, -4.5], scale: 2.4, flip: true },
+    { sprite: 'sunkenTire', pos: [12.5, -3.5, -4.5], scale: 1.4 },
+    { sprite: 'driftwood', pos: [13.5, -3.5, -4], scale: 1.6 },
+    { sprite: 'kelpB', pos: [14, -3.3, -5], scale: 2.5 },
+
+    // FOREGROUND — near decor framing the play plane, kept off the guided lane.
+    { sprite: 'kelpA', pos: [-13, -3.3, -1], scale: 2.2, layer: 'fg', flip: true },
+    { sprite: 'anemone', pos: [-10, -3.5, -0.8], scale: 1.2, layer: 'fg' },
+    { sprite: 'driftwood', pos: [-9, -3.5, -1], scale: 1.4, layer: 'fg' },
+    { sprite: 'coralFan', pos: [-0.5, -3.4, -1], scale: 1.6, layer: 'fg' },
+    { sprite: 'shellCluster', pos: [1, -3.5, -0.9], scale: 1, layer: 'fg' },
+    { sprite: 'rockPile', pos: [7.5, -3.4, -1], scale: 1.8, layer: 'fg' },
+    { sprite: 'kelpC', pos: [10, -3.3, -1.2], scale: 2, layer: 'fg', flip: true },
+    { sprite: 'anemone', pos: [11.5, -3.5, -0.8], scale: 1.1, layer: 'fg' },
+    { sprite: 'coralFan', pos: [9, 0.4, -0.5], scale: 1.4, layer: 'fg' },
+
+    // Surface lily pads + drifting bubbles.
+    { sprite: 'lilyPadBig', pos: [-7, 5.6, -2], scale: 2.4 },
+    { sprite: 'lilyPadBig', pos: [2, 5.8, -3], scale: 2.8, flip: true },
+    { sprite: 'lilyPadBig', pos: [8, 5.6, -2], scale: 2.2 },
     { sprite: 'bubbleCluster', pos: [-3, 1, -2], scale: 1.2 },
-    { sprite: 'bubbleCluster', pos: [6, -0.5, -1], scale: 1 },
+    { sprite: 'bubbleCluster', pos: [6, -0.5, -1], scale: 1, layer: 'fg' },
   ],
   // The nursery nest + eggs, revealed beneath the debris once it's dug clear.
   reveal: {
@@ -201,7 +274,8 @@ const LEVEL_1: Level = {
 
 // ---------------------------------------------------------------------------
 // LEVEL 2 — "Bad Water"
-// Reed beds choked by a net and leaking drums. Metallic sick-green water.
+// Biome: REED / DRUM WETLAND. Dense reed forests, a thick lily-pad ceiling, and
+// sunken crates & drums half-buried in the mud. Metallic sick-green water.
 // ---------------------------------------------------------------------------
 const LEVEL_2: Level = {
   id: 'l2-bad-water',
@@ -260,26 +334,64 @@ const LEVEL_2: Level = {
       doneLine: 'Now — what is stamped on these.',
     },
   ],
+  // FAR BACKGROUND — a wide bank of faint reed silhouettes and a low ridge; god-rays
+  // filter weakly through the choked wetland.
+  background: [
+    { sprite: 'bgRidge', pos: [-9, -3.5, -13], scale: 6, parallax: 0.18 },
+    { sprite: 'bgRidge', pos: [9, -3.6, -13], scale: 6, flip: true, parallax: 0.18 },
+    { sprite: 'bgReeds', pos: [-15, -3.3, -11], scale: 5.5, parallax: 0.24 },
+    { sprite: 'bgReeds', pos: [-3, -3.3, -11.5], scale: 5.5, parallax: 0.22 },
+    { sprite: 'bgReeds', pos: [10, -3.3, -11], scale: 5.5, flip: true, parallax: 0.24 },
+    { sprite: 'bgReeds', pos: [18, -3.3, -11], scale: 5, parallax: 0.24 },
+    { sprite: 'kelpC', pos: [-18, -3.5, -10], scale: 3, parallax: 0.3 },
+    { sprite: 'kelpA', pos: [4, -3.5, -10], scale: 3.2, parallax: 0.3 },
+    { sprite: 'kelpB', pos: [15, -3.5, -9.5], scale: 3, flip: true, parallax: 0.32 },
+    { sprite: 'lightShaftSoft', pos: [-5, 2.5, -9], scale: 6, parallax: 0.1 },
+    { sprite: 'lightShaftSoft', pos: [8, 2, -9], scale: 6.5, parallax: 0.1 },
+  ],
   props: [
-    { sprite: 'seaweedTall', pos: [-11, -2.8, -3], scale: 2.6 },
-    { sprite: 'seaweedTall', pos: [-9.6, -2.8, -2.5], scale: 2.4, flip: true },
-    { sprite: 'seaweedTall', pos: [-8, -2.8, -3], scale: 2.8 },
-    { sprite: 'seaweedShort', pos: [-6.5, -3.2, -2], scale: 1.6 },
-    { sprite: 'rockGrey', pos: [-4.5, -3.4, -1], scale: 1.3 },
-    { sprite: 'seaweedTall', pos: [-3, -2.8, -3], scale: 2.5, flip: true },
-    { sprite: 'coral', pos: [-1.5, -3.2, -2], scale: 1.4 },
-    { sprite: 'seaweedTall', pos: [1, -2.8, -3], scale: 2.7 },
-    { sprite: 'seaweedShort', pos: [2.8, -3.3, -2], scale: 1.5, flip: true },
-    { sprite: 'rockBrown', pos: [4.5, -3.4, -1], scale: 1.5 },
-    { sprite: 'seaweedTall', pos: [6.5, -2.8, -3], scale: 2.6 },
-    { sprite: 'seaweedTall', pos: [8, -2.8, -2.5], scale: 2.3, flip: true },
-    { sprite: 'coral', pos: [9.8, -3.1, -3], scale: 1.6 },
-    { sprite: 'rockGrey', pos: [11, -3.4, -2], scale: 1.4 },
-    { sprite: 'lilyPad', pos: [-6, 5.6, -2], scale: 2.2 },
-    { sprite: 'lilyPad', pos: [3, 5.8, -3], scale: 2 },
-    { sprite: 'lilyPad', pos: [9, 5.6, -2], scale: 2.4, flip: true },
+    // MID — CLUSTER A: dense west reed forest.
+    { sprite: 'kelpA', pos: [-14, -3.3, -5], scale: 3 },
+    { sprite: 'kelpB', pos: [-12.5, -3.3, -4.5], scale: 3.2, flip: true },
+    { sprite: 'kelpA', pos: [-11, -3.3, -5.5], scale: 2.8 },
+    { sprite: 'kelpC', pos: [-9.5, -3.3, -4], scale: 2.6 },
+    { sprite: 'anemone', pos: [-13, -3.5, -4], scale: 1.1 },
+    // MID — CLUSTER B: sunken drums & debris around the net.
+    { sprite: 'sunkenCrate', pos: [-5, -3.5, -4.5], scale: 1.5 },
+    { sprite: 'sunkenTire', pos: [-3.5, -3.5, -4], scale: 1.3 },
+    { sprite: 'driftwood', pos: [-6.5, -3.5, -4.2], scale: 1.6, flip: true },
+    { sprite: 'rockPile', pos: [-4, -3.4, -5], scale: 1.6 },
+    // MID — CLUSTER C: mid-river reed patch.
+    { sprite: 'kelpB', pos: [-1, -3.3, -5], scale: 2.8 },
+    { sprite: 'kelpA', pos: [0.5, -3.3, -4.5], scale: 3, flip: true },
+    { sprite: 'kelpC', pos: [2, -3.3, -5.2], scale: 2.5 },
+    { sprite: 'shellCluster', pos: [1, -3.5, -3.8], scale: 0.9 },
+    // MID — CLUSTER D: east reed forest + more sunken crates (the drum trail).
+    { sprite: 'kelpA', pos: [6.5, -3.3, -5], scale: 3 },
+    { sprite: 'kelpB', pos: [8, -3.3, -4.5], scale: 2.8, flip: true },
+    { sprite: 'sunkenCrate', pos: [10, -3.5, -4.5], scale: 1.5 },
+    { sprite: 'driftwood', pos: [11.5, -3.5, -4], scale: 1.5 },
+    { sprite: 'kelpC', pos: [13, -3.3, -5], scale: 2.6 },
+    { sprite: 'coralFan', pos: [14, -3.4, -5.2], scale: 1.6 },
+
+    // FOREGROUND — near reeds and debris hugging the edges of the lane.
+    { sprite: 'kelpA', pos: [-12, -3.3, -1], scale: 2.6, layer: 'fg', flip: true },
+    { sprite: 'kelpC', pos: [-10, -3.3, -1.2], scale: 2.2, layer: 'fg' },
+    { sprite: 'anemone', pos: [-8, -3.5, -0.8], scale: 1.1, layer: 'fg' },
+    { sprite: 'driftwood', pos: [-7, -3.5, -1], scale: 1.5, layer: 'fg' },
+    { sprite: 'shellCluster', pos: [-5, -3.5, -0.9], scale: 1, layer: 'fg' },
+    { sprite: 'kelpB', pos: [1.5, -3.3, -1.1], scale: 2.4, layer: 'fg', flip: true },
+    { sprite: 'sunkenTire', pos: [7, -3.5, -1], scale: 1.3, layer: 'fg' },
+    { sprite: 'kelpA', pos: [9, -3.3, -1.2], scale: 2.5, layer: 'fg' },
+    { sprite: 'kelpC', pos: [12, -3.3, -1], scale: 2.2, layer: 'fg', flip: true },
+
+    // A thick lily-pad ceiling over the wetland + drifting bubbles.
+    { sprite: 'lilyPadBig', pos: [-6, 5.6, -2], scale: 2.8 },
+    { sprite: 'lilyPadBig', pos: [-1, 5.5, -2.5], scale: 2.4, flip: true },
+    { sprite: 'lilyPadBig', pos: [3, 5.8, -3], scale: 3 },
+    { sprite: 'lilyPadBig', pos: [9, 5.6, -2], scale: 2.6, flip: true },
     { sprite: 'bubbleCluster', pos: [-2, 0.5, -2], scale: 1.1 },
-    { sprite: 'bubbleCluster', pos: [5, 1.5, -1], scale: 0.9 },
+    { sprite: 'bubbleCluster', pos: [5, 1.5, -1], scale: 0.9, layer: 'fg' },
   ],
   // The trapped fry swim free once the net is cut.
   fry: {
@@ -297,8 +409,9 @@ const LEVEL_2: Level = {
 
 // ---------------------------------------------------------------------------
 // LEVEL 3 — "The Source"
-// A giant outflow pipe pours waste; sick fish drift. Toxic dark water.
-// Path climbs upstream toward the surface and the reveal.
+// Biome: INDUSTRIAL PIPE OUTFALL. A drowned ruin field — broken pillars, tires,
+// crates and driftwood — with sickly, sparse kelp, climbing upstream toward the
+// outflow pipe and the dock. Toxic dark-red water.
 // ---------------------------------------------------------------------------
 const LEVEL_3: Level = {
   id: 'l3-the-source',
@@ -355,25 +468,64 @@ const LEVEL_3: Level = {
       doneLine: 'A dock. And a man in a very fine hat.',
     },
   ],
+  // FAR BACKGROUND — a skyline of drowned pillar silhouettes, a low ridge, and a
+  // strong god-ray leaning toward the dock on the right (where the pipe surfaces).
+  background: [
+    { sprite: 'bgRidge', pos: [-9, -3.5, -13], scale: 6, parallax: 0.18 },
+    { sprite: 'bgRidge', pos: [7, -3.6, -13], scale: 6, flip: true, parallax: 0.18 },
+    { sprite: 'bgReeds', pos: [-15, -3.3, -11], scale: 5, parallax: 0.24 },
+    { sprite: 'bgReeds', pos: [14, -3.3, -11], scale: 5, flip: true, parallax: 0.24 },
+    { sprite: 'sunkenPillar', pos: [-17, -3.5, -10], scale: 3.5, parallax: 0.3 },
+    { sprite: 'sunkenPillar', pos: [-12, -3.5, -10.5], scale: 3, flip: true, parallax: 0.3 },
+    { sprite: 'sunkenPillar', pos: [5, -3.5, -10], scale: 3.2, parallax: 0.3 },
+    { sprite: 'kelpC', pos: [-3, -3.5, -10], scale: 2.6, parallax: 0.3 },
+    { sprite: 'kelpB', pos: [11, -3.5, -9.5], scale: 2.4, flip: true, parallax: 0.32 },
+    { sprite: 'lightShaftSoft', pos: [8, 3, -9], scale: 7, parallax: 0.1 },
+    { sprite: 'lightShaftSoft', pos: [-4, 2, -9], scale: 5, parallax: 0.1 },
+  ],
   props: [
     // NB: the outflow pipe + surface dock are drawn as real 3D geometry by the
-    // PipeDock component from `pipeDock` below — no fake rock props stand in now.
-    { sprite: 'seaweedShort', pos: [-11, -3, -3], scale: 1.6 },
-    { sprite: 'rockBrown', pos: [-9.5, -3.4, -2], scale: 1.8 },
-    { sprite: 'citizenTetra', pos: [-7, -1, 0.5], scale: 0.9, flip: true },
-    { sprite: 'seaweedShort', pos: [-6, -3.3, -2], scale: 1.3 },
-    { sprite: 'rockBrown', pos: [-4, -3.4, -1], scale: 1.6 },
-    { sprite: 'citizenRasbora', pos: [-3, 0.5, 0.5], scale: 0.8 },
-    { sprite: 'rockBrown', pos: [-1, -3.2, -2], scale: 2 },
-    { sprite: 'coral', pos: [1.5, -3.3, -3], scale: 1.4 },
-    { sprite: 'rockGrey', pos: [3.5, -3.4, -1], scale: 1.5 },
-    { sprite: 'citizenAngel', pos: [4, 1.5, 0.5], scale: 0.9, flip: true },
-    { sprite: 'rockBrown', pos: [6.5, -3.4, -2], scale: 1.7 },
-    { sprite: 'seaweedTall', pos: [-8.5, -2.8, -3], scale: 2.2 },
-    { sprite: 'lilyPad', pos: [-4, 5.6, -2], scale: 2 },
-    { sprite: 'lilyPad', pos: [4, 5.8, -3], scale: 2.2, flip: true },
-    { sprite: 'bubbleCluster', pos: [8.5, 0, -0.5], scale: 1.4 },
-    { sprite: 'bubbleCluster', pos: [8.8, 2.5, -0.5], scale: 1.2 },
+    // PipeDock component from `pipeDock` below — no fake rock props stand in.
+
+    // MID — CLUSTER A: west ruin field (toppled pillars & rubble).
+    { sprite: 'sunkenPillar', pos: [-14, -3.4, -5], scale: 2.8 },
+    { sprite: 'sunkenPillar', pos: [-11.5, -3.4, -4.5], scale: 2.4, flip: true },
+    { sprite: 'rockPile', pos: [-12.8, -3.4, -5.2], scale: 1.8 },
+    { sprite: 'driftwood', pos: [-10, -3.5, -4], scale: 1.6 },
+    { sprite: 'rockBig', pos: [-9.2, -3.4, -5], scale: 2 },
+    // MID — CLUSTER B: the waste choke (debris packed into the flow).
+    { sprite: 'sunkenCrate', pos: [-2, -3.5, -4.5], scale: 1.6 },
+    { sprite: 'sunkenTire', pos: [-0.5, -3.5, -4], scale: 1.4 },
+    { sprite: 'rockPile', pos: [-3, -3.4, -5], scale: 1.8 },
+    { sprite: 'driftwood', pos: [-1.2, -3.5, -4.2], scale: 1.5, flip: true },
+    // MID — CLUSTER C: mid rocks with a few surviving, sickly weeds.
+    { sprite: 'rockBig', pos: [3, -3.4, -5], scale: 2.2 },
+    { sprite: 'rockFlat', pos: [4.5, -3.5, -4.5], scale: 1.8, flip: true },
+    { sprite: 'kelpC', pos: [5.5, -3.3, -5], scale: 2.2 },
+    { sprite: 'sunkenTire', pos: [2.2, -3.5, -4], scale: 1.2 },
+    // MID — CLUSTER D: pipe-approach ruins climbing toward the dock.
+    { sprite: 'sunkenPillar', pos: [8.5, -3.4, -5], scale: 2.6 },
+    { sprite: 'sunkenCrate', pos: [10, -3.5, -4.5], scale: 1.5 },
+    { sprite: 'rockPile', pos: [11.5, -3.4, -5], scale: 1.8 },
+    { sprite: 'driftwood', pos: [12.5, -3.5, -4], scale: 1.5 },
+
+    // FOREGROUND — near ruins + the sick residents Reginald tends to.
+    { sprite: 'sunkenPillar', pos: [-13, -3.4, -1], scale: 2.4, layer: 'fg', flip: true },
+    { sprite: 'rockPile', pos: [-11, -3.4, -1.2], scale: 1.8, layer: 'fg' },
+    { sprite: 'driftwood', pos: [-9, -3.5, -0.9], scale: 1.5, layer: 'fg' },
+    { sprite: 'citizenTetra', pos: [-7, -1, 0.5], scale: 0.9, layer: 'fg', flip: true },
+    { sprite: 'citizenRasbora', pos: [-3, 0.5, 0.5], scale: 0.8, layer: 'fg' },
+    { sprite: 'citizenAngel', pos: [4, 1.5, 0.5], scale: 0.9, layer: 'fg', flip: true },
+    { sprite: 'sunkenTire', pos: [-0.5, -3.5, -1], scale: 1.2, layer: 'fg' },
+    { sprite: 'rockPile', pos: [1, -3.4, -1.1], scale: 1.6, layer: 'fg' },
+    { sprite: 'sunkenPillar', pos: [7, -3.4, -1], scale: 2.2, layer: 'fg' },
+    { sprite: 'rockBig', pos: [9, -3.4, -1.2], scale: 1.8, layer: 'fg', flip: true },
+
+    // Bubbles boiling up from the pipe + a couple of polluted lily pads.
+    { sprite: 'bubbleCluster', pos: [8.5, 0, -0.5], scale: 1.4, layer: 'fg' },
+    { sprite: 'bubbleCluster', pos: [8.8, 2.5, -0.5], scale: 1.2, layer: 'fg' },
+    { sprite: 'lilyPadBig', pos: [-4, 5.6, -2], scale: 2.2 },
+    { sprite: 'lilyPadBig', pos: [4, 5.8, -3], scale: 2.4, flip: true },
   ],
   // The outflow pipe climbs from the riverbed to a surface dock that dumps
   // polluted water — the 'l3-follow-pipe' objective leads up to it.
@@ -389,9 +541,9 @@ const LEVEL_3: Level = {
 
 // ---------------------------------------------------------------------------
 // LEVEL 4 — "Sleep With The Fishes" (BOSS)
-// Don Vitale, in a SCUBA suit, SWIMS the whole fight, hurling waste barrels;
-// Reginald dodges and homes three barrels back onto his live position. No static
-// boss prop — Boss.tsx renders the mobile scuba Vitale. Water is clearing.
+// Biome: DEEP DARK BOSS ARENA. A ring of drowned pillars and dark kelp frames a
+// wide-open fighting floor beneath the dock; god-rays stab down from the platform
+// above. Center is deliberately CLEAR for the barrel duel. Water is clearing.
 // ---------------------------------------------------------------------------
 const LEVEL_4: Level = {
   id: 'l4-sleep-with-the-fishes',
@@ -443,25 +595,60 @@ const LEVEL_4: Level = {
       doneLine: 'Three. Goodnight, Vitale.',
     },
   ],
+  // FAR BACKGROUND — a deep pillar-ruin skyline, dark kelp on the horizon, and
+  // dramatic god-rays raining down from the dock above the arena.
+  background: [
+    { sprite: 'bgRidge', pos: [-10, -3.5, -13], scale: 6.5, parallax: 0.18 },
+    { sprite: 'bgRidge', pos: [10, -3.6, -13], scale: 6.5, flip: true, parallax: 0.18 },
+    { sprite: 'sunkenPillar', pos: [-16, -3.5, -10], scale: 3.4, parallax: 0.3 },
+    { sprite: 'sunkenPillar', pos: [16, -3.5, -10], scale: 3.4, flip: true, parallax: 0.3 },
+    { sprite: 'sunkenPillar', pos: [-6, -3.5, -11], scale: 3, parallax: 0.28 },
+    { sprite: 'sunkenPillar', pos: [6, -3.5, -11], scale: 3, flip: true, parallax: 0.28 },
+    { sprite: 'kelpA', pos: [-13, -3.5, -10], scale: 3.2, parallax: 0.3 },
+    { sprite: 'kelpB', pos: [13, -3.5, -10], scale: 3, flip: true, parallax: 0.3 },
+    { sprite: 'lightShaftSoft', pos: [-3, 3, -9], scale: 7, parallax: 0.08 },
+    { sprite: 'lightShaftSoft', pos: [3, 3.5, -9], scale: 7.5, parallax: 0.08 },
+    { sprite: 'lightShaftSoft', pos: [0, 3, -8.5], scale: 6, parallax: 0.08 },
+  ],
   props: [
-    // No boss prop here — Boss.tsx renders the mobile scuba Vitale. These form the
-    // dock ceiling backdrop above the waterline.
+    // The dock/pipe ceiling backdrop above the waterline (kept as the platform the
+    // fight rages beneath). PipeDock draws the real pipe; these are the pilings.
     { sprite: 'rockGrey', pos: [-6, 5.4, -1], scale: 3 },
     { sprite: 'rockGrey', pos: [-6, 2, -1], scale: 3 },
     { sprite: 'rockGrey', pos: [6, 5.4, -1], scale: 3 },
     { sprite: 'rockGrey', pos: [6, 2, -1], scale: 3 },
-    { sprite: 'seaweedTall', pos: [-11, -2.8, -3], scale: 2.4 },
-    { sprite: 'seaweedTall', pos: [-9, -2.8, -3], scale: 2, flip: true },
-    { sprite: 'coral', pos: [-6.5, -3.2, -2], scale: 1.5 },
-    { sprite: 'rockBrown', pos: [-3.5, -3.4, -1], scale: 1.6 },
-    { sprite: 'seaweedShort', pos: [-1, -3.3, -2], scale: 1.4 },
-    { sprite: 'coral', pos: [2, -3.2, -3], scale: 1.6 },
-    { sprite: 'rockBrown', pos: [4.5, -3.4, -1], scale: 1.5 },
-    { sprite: 'seaweedTall', pos: [7, -2.8, -3], scale: 2.3 },
-    { sprite: 'seaweedShort', pos: [9.5, -3.3, -2], scale: 1.5, flip: true },
+
+    // MID — LEFT arena wall of ruins & kelp (frames the floor, center stays clear).
+    { sprite: 'sunkenPillar', pos: [-14, -3.4, -5], scale: 3 },
+    { sprite: 'rockBig', pos: [-12, -3.4, -5.2], scale: 2.2 },
+    { sprite: 'rockPile', pos: [-10.5, -3.4, -5], scale: 1.8 },
+    { sprite: 'kelpA', pos: [-13.2, -3.3, -4.5], scale: 2.6, flip: true },
+    { sprite: 'anemone', pos: [-11, -3.5, -4], scale: 1.1 },
+    // MID — RIGHT arena wall of ruins & kelp.
+    { sprite: 'sunkenPillar', pos: [14, -3.4, -5], scale: 3, flip: true },
+    { sprite: 'rockBig', pos: [12, -3.4, -5.2], scale: 2.2 },
+    { sprite: 'rockPile', pos: [10.5, -3.4, -5], scale: 1.8 },
+    { sprite: 'kelpB', pos: [13.2, -3.3, -4.5], scale: 2.6 },
+    { sprite: 'anemone', pos: [11, -3.5, -4], scale: 1.1 },
+    // MID — BACK-CENTER low ruins, set deep so they never crowd the fight.
+    { sprite: 'sunkenPillar', pos: [-4, -3.4, -6], scale: 2.4 },
+    { sprite: 'sunkenPillar', pos: [4, -3.4, -6], scale: 2.4, flip: true },
+    { sprite: 'rockPile', pos: [0, -3.5, -6.2], scale: 2 },
+    { sprite: 'coralB', pos: [-2, -3.4, -6], scale: 1.4 },
+    { sprite: 'coralA', pos: [2, -3.4, -6], scale: 1.4 },
+
+    // FOREGROUND — pushed to the far edges so the barrel duel stays unobstructed.
+    { sprite: 'kelpA', pos: [-11, -3.3, -1], scale: 2.6, layer: 'fg', flip: true },
+    { sprite: 'sunkenPillar', pos: [-13, -3.4, -1.2], scale: 2.4, layer: 'fg' },
+    { sprite: 'anemone', pos: [-9.5, -3.5, -0.9], scale: 1.1, layer: 'fg' },
+    { sprite: 'kelpB', pos: [11, -3.3, -1], scale: 2.6, layer: 'fg' },
+    { sprite: 'sunkenPillar', pos: [13, -3.4, -1.2], scale: 2.4, layer: 'fg', flip: true },
+    { sprite: 'anemone', pos: [9.5, -3.5, -0.9], scale: 1.1, layer: 'fg' },
+
+    // Rising bubbles in the clearing water.
     { sprite: 'bubbleCluster', pos: [-4, 0, -1], scale: 1.2 },
     { sprite: 'bubbleCluster', pos: [3, 1, -1], scale: 1 },
-    { sprite: 'bubbleCluster', pos: [-1, -1.5, -0.5], scale: 0.9 },
+    { sprite: 'bubbleCluster', pos: [-1, -1.5, -0.5], scale: 0.9, layer: 'fg' },
   ],
   // The dock + pipe ceiling backdrop the whole fight plays out beneath.
   pipeDock: {

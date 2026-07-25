@@ -1,88 +1,207 @@
 import { Suspense, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useLoader, useThree } from '@react-three/fiber'
 import {
   AdditiveBlending,
   MathUtils,
+  NearestFilter,
+  RepeatWrapping,
+  SRGBColorSpace,
+  TextureLoader,
+  type Group,
   type Mesh,
   type MeshBasicMaterial,
   type Points,
   type PointsMaterial,
+  type Texture,
 } from 'three'
 import { BillboardSprite } from './BillboardSprite'
 import { SPRITES, type SpriteKey } from './sprites'
-import { LEVELS } from './levels'
+import { LEVELS, type PropPlacement } from './levels'
 import { useGame } from './store'
 import { PipeDock } from './PipeDock'
 
-// Decor that grows up FROM the riverbed is planted by its bottom edge; the pipe
-// and dock pilings (rockGrey) are tall structures that read the same way.
+// ---------------------------------------------------------------------------
+// Sprite role sets — which decor plants on the riverbed, which is a living plant
+// that wilts in bad water, and which sways gently in the current.
+// ---------------------------------------------------------------------------
 const BOTTOM_ANCHORED: ReadonlySet<SpriteKey> = new Set<SpriteKey>([
-  'seaweedTall',
-  'seaweedShort',
-  'rockBrown',
-  'rockGrey',
-  'coral',
+  'seaweedTall', 'seaweedShort', 'rockBrown', 'rockGrey', 'coral',
+  'kelpA', 'kelpB', 'kelpC', 'coralA', 'coralB', 'coralFan',
+  'rockBig', 'rockFlat', 'rockPile', 'sunkenPillar', 'sunkenTire',
+  'sunkenCrate', 'driftwood', 'shellCluster', 'anemone', 'nursery',
+  'bgReeds', 'bgRidge', 'net',
 ])
-// Living plants wilt (fade + shrink a touch) when the water turns murky.
 const PLANTS: ReadonlySet<SpriteKey> = new Set<SpriteKey>([
-  'seaweedTall',
-  'seaweedShort',
-  'coral',
+  'seaweedTall', 'seaweedShort', 'coral',
+  'kelpA', 'kelpB', 'kelpC', 'coralA', 'coralB', 'coralFan', 'anemone',
+])
+// Living plants that also sway laterally in the current.
+const SWAY: ReadonlySet<SpriteKey> = new Set<SpriteKey>([
+  'seaweedTall', 'seaweedShort',
+  'kelpA', 'kelpB', 'kelpC', 'coralFan', 'anemone',
 ])
 
-// ---------------------------------------------------------------------------
-// Far parallax backdrop — a deterministic silhouette band well behind the play
-// plane. Varies per level via `seed`; recedes into the murk when health is low.
-// ---------------------------------------------------------------------------
-interface FarItem {
-  key: SpriteKey
-  x: number
-  z: number
-  scale: number
-  flip: boolean
+// Camera-follow strength (Player.tsx: camera.x = player.x * 0.7). We add a gentle
+// world-space offset per layer so far bands lag the near plane → parallax depth.
+const PARALLAX_GAIN = 0.4
+const BAND_PARALLAX = { bg: 0.2, mid: 0.6, fg: 0.9 } as const
+type Band = keyof typeof BAND_PARALLAX
+
+interface Placed {
+  p: PropPlacement
+  band: Band
+  parallax: number
+  bottom: boolean
+  isPlant: boolean
+  sway: number // 0 = static, else sway amplitude
+  phase: number
 }
 
-const FAR_KEYS: SpriteKey[] = ['seaweedTall', 'rockGrey', 'seaweedTall', 'rockBrown', 'seaweedShort']
-
-function buildFar(seed: number): FarItem[] {
-  const items: FarItem[] = []
-  for (let i = 0; i < 11; i++) {
-    const jitter = ((seed * 7 + i * 13) % 5) - 2
-    items.push({
-      key: FAR_KEYS[(i + seed) % FAR_KEYS.length],
-      x: -20 + i * 4 + jitter,
-      z: -8 - ((seed + i) % 3),
-      scale: 2.6 + ((seed * 3 + i * 5) % 4) * 0.45,
-      flip: (i + seed) % 2 === 0,
-    })
-  }
-  return items
+function crisp(t: Texture) {
+  t.magFilter = NearestFilter
+  t.minFilter = NearestFilter
+  t.generateMipmaps = false
+  t.colorSpace = SRGBColorSpace
+  t.needsUpdate = true
 }
 
-function FarBackdrop({ seed, frac }: { seed: number; frac: number }) {
-  const items = useMemo(() => buildFar(seed), [seed])
-  const opacity = MathUtils.lerp(0.12, 0.42, frac)
+// ---------------------------------------------------------------------------
+// God-ray — a soft additive light shaft. Its gradient has smooth alpha, so it
+// CANNOT go through BillboardSprite (which alpha-tests hard edges); it needs its
+// own additive material. Breathes slowly and strengthens as the river clears.
+// ---------------------------------------------------------------------------
+function GodRay({ position, scale, flip, frac }: { position: [number, number, number]; scale: number; flip?: boolean; frac: number }) {
+  const tex = useLoader(TextureLoader, SPRITES.lightShaftSoft) as Texture
+  const matRef = useRef<MeshBasicMaterial>(null)
+  useMemo(() => crisp(tex), [tex])
+  const [w, h] = useMemo<[number, number]>(() => {
+    const img = tex.image as { width?: number; height?: number } | undefined
+    const a = (img?.width ?? 1) / (img?.height ?? 1)
+    return a >= 1 ? [1, 1 / a] : [a, 1]
+  }, [tex])
+  const base = MathUtils.lerp(0.05, 0.22, frac)
+  useFrame((state) => {
+    const m = matRef.current
+    if (!m) return
+    m.opacity = base * (0.7 + 0.3 * Math.sin(state.clock.elapsedTime * 0.5 + position[0]))
+  })
+  return (
+    <mesh position={position} scale={[w * scale * (flip ? -1 : 1), h * scale, 1]}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={tex}
+        transparent
+        depthWrite={false}
+        opacity={base}
+        toneMapped={false}
+        blending={AdditiveBlending}
+        color="#bfe6ff"
+      />
+    </mesh>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Caustics — a scrolling tiled light texture skimming the seabed. Additive, so
+// it reads as dappled sunlight; fades out in murky water.
+// ---------------------------------------------------------------------------
+function Caustics({ frac }: { frac: number }) {
+  const tex = useLoader(TextureLoader, SPRITES.causticTile) as Texture
+  const matRef = useRef<MeshBasicMaterial>(null)
+  useMemo(() => {
+    crisp(tex)
+    tex.wrapS = RepeatWrapping
+    tex.wrapT = RepeatWrapping
+    tex.repeat.set(10, 8)
+  }, [tex])
+  useFrame((state, delta) => {
+    tex.offset.x += delta * 0.015
+    tex.offset.y += delta * 0.008
+    const m = matRef.current
+    if (m) m.opacity = MathUtils.lerp(0.04, 0.16, frac) * (0.8 + 0.2 * Math.sin(state.clock.elapsedTime * 0.4))
+  })
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.4, -4]}>
+      <planeGeometry args={[70, 40]} />
+      <meshBasicMaterial
+        ref={matRef}
+        map={tex}
+        transparent
+        depthWrite={false}
+        opacity={0.1}
+        toneMapped={false}
+        blending={AdditiveBlending}
+        color="#9fe8ff"
+      />
+    </mesh>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// A parallax depth band. Each item gets its own group; one useFrame slides every
+// group by its parallax offset (far bands lag the play plane) and sways plants.
+// ---------------------------------------------------------------------------
+function ParallaxBand({
+  items,
+  frac,
+  bandOpacity,
+}: {
+  items: Placed[]
+  frac: number
+  bandOpacity: number
+}) {
+  const { camera } = useThree()
+  const refs = useRef<(Group | null)[]>([])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const camX = camera.position.x
+    for (let i = 0; i < items.length; i++) {
+      const g = refs.current[i]
+      if (!g) continue
+      const it = items[i]
+      const par = camX * (1 - it.parallax) * PARALLAX_GAIN
+      const drift = it.sway ? Math.sin(t * 0.6 + it.phase) * it.sway : 0
+      g.position.x = it.p.pos[0] + par + drift
+    }
+  })
+
   return (
     <>
-      {items.map((it, i) => (
-        <BillboardSprite
-          key={`far-${seed}-${i}`}
-          url={SPRITES[it.key]}
-          position={[it.x, -3.6, it.z]}
-          scale={it.scale}
-          flipX={it.flip}
-          anchor="bottom"
-          opacity={opacity}
-        />
-      ))}
+      {items.map((it, i) => {
+        const isGodRay = it.p.sprite === 'lightShaftSoft'
+        const scale = (it.p.scale ?? 1) * (it.isPlant ? MathUtils.lerp(0.88, 1, frac) : 1)
+        const plantFade = it.isPlant ? MathUtils.lerp(0.55, 1, frac) : 1
+        const opacity = bandOpacity * plantFade
+        return (
+          <group
+            key={i}
+            ref={(el) => (refs.current[i] = el)}
+            position={[it.p.pos[0], it.p.pos[1], it.p.pos[2]]}
+          >
+            {isGodRay ? (
+              <GodRay position={[0, 0, 0]} scale={it.p.scale ?? 1} flip={it.p.flip} frac={frac} />
+            ) : (
+              <BillboardSprite
+                url={SPRITES[it.p.sprite]}
+                position={[0, 0, 0]}
+                scale={scale}
+                flipX={it.p.flip}
+                anchor={it.bottom ? 'bottom' : 'center'}
+                opacity={opacity}
+              />
+            )}
+          </group>
+        )
+      })}
     </>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Path lane — a faint trail of light along the authored waypoints. A travelling
-// pulse flows toward the goal, reinforcing the definite route. Brightens as the
-// river clears.
+// Path lane — a faint trail of light along the authored waypoints with a pulse
+// that flows toward the goal. Brightens as the river clears.
 // ---------------------------------------------------------------------------
 function buildLane(path: [number, number][], perSeg = 4): [number, number][] {
   const pts: [number, number][] = []
@@ -136,8 +255,8 @@ function PathLane({ path }: { path: [number, number][] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Murk haze — suspended brown sediment that is thick in bad water and dissolves
-// away as the river is cleaned. Drifts gently; never re-renders (imperative).
+// Murk haze — suspended sediment, thick in bad water, dissolving as the river is
+// cleaned. Drifts gently; never re-renders (updated imperatively).
 // ---------------------------------------------------------------------------
 function MurkHaze({ count = 150 }: { count?: number }) {
   const ref = useRef<Points>(null)
@@ -186,11 +305,25 @@ function MurkHaze({ count = 150 }: { count?: number }) {
   )
 }
 
+// Turn raw PropPlacements into render descriptors for a given band.
+function place(props: PropPlacement[], band: Band): Placed[] {
+  return props.map((p, i) => ({
+    p,
+    band,
+    parallax: p.parallax ?? BAND_PARALLAX[band],
+    bottom: BOTTOM_ANCHORED.has(p.sprite),
+    isPlant: PLANTS.has(p.sprite),
+    sway: SWAY.has(p.sprite) ? 0.05 + (p.scale ?? 1) * 0.02 : 0,
+    phase: (i * 1.7 + p.pos[0] * 0.3) % (Math.PI * 2),
+  }))
+}
+
 /**
- * The current level's full, designed world: authored props rendered densely as
- * bottom-anchored billboards with a far parallax backdrop, a glowing path lane
- * along the level's waypoints, and health-reactive murk + plant wilting.
- * Drop INSIDE the 3D <Scene>.
+ * The current level's full, layered open world: a far BACKGROUND silhouette band,
+ * a parallax MID band of kelp forests / coral fields / sunken ruins, and a
+ * detailed FOREGROUND — each camera-parallaxed for depth. Soft god-rays and
+ * scrolling seabed caustics, a glowing objective lane, and health-reactive murk
+ * + plant wilting. Drop INSIDE the 3D <Scene>.
  */
 export function LevelEnvironment() {
   const levelIndex = useGame((s) => s.levelIndex)
@@ -200,34 +333,37 @@ export function LevelEnvironment() {
   const frac = health / 100
 
   // L1: the heaped debris clump is dug clear once the reveal's afterObjective
-  // completes. Hide the debris props then so the nursery (drawn by Objectives)
-  // is exposed beneath. An objective is done once it sits behind the active one.
+  // completes; hide those props then so the nursery (drawn by Objectives) shows.
   const reveal = level.reveal
   const revealIdx = reveal ? level.objectives.findIndex((o) => o.id === reveal.afterObjective) : -1
   const debrisCleared = revealIdx >= 0 && objectiveIndex > revealIdx
 
+  // Split the authored world into its three parallax bands.
+  const { bg, mid, fg } = useMemo(() => {
+    const midProps: PropPlacement[] = []
+    const fgProps: PropPlacement[] = []
+    for (const p of level.props) {
+      if (p.debris && debrisCleared) continue
+      if (p.layer === 'fg') fgProps.push(p)
+      else midProps.push(p)
+    }
+    return {
+      bg: place(level.background, 'bg'),
+      mid: place(midProps, 'mid'),
+      fg: place(fgProps, 'fg'),
+    }
+  }, [level, debrisCleared])
+
+  // Far band recedes into the murk when health is low (lower opacity + haze).
+  const bgOpacity = MathUtils.lerp(0.3, 0.6, frac)
+
   return (
     <group>
       <Suspense fallback={null}>
-        <FarBackdrop seed={levelIndex} frac={frac} />
-        {level.props.map((p, i) => {
-          if (p.debris && debrisCleared) return null
-          const bottom = BOTTOM_ANCHORED.has(p.sprite)
-          const isPlant = PLANTS.has(p.sprite)
-          const scale = (p.scale ?? 1) * (isPlant ? MathUtils.lerp(0.9, 1, frac) : 1)
-          const opacity = isPlant ? MathUtils.lerp(0.6, 1, frac) : 1
-          return (
-            <BillboardSprite
-              key={`${level.id}-prop-${i}`}
-              url={SPRITES[p.sprite]}
-              position={p.pos}
-              scale={scale}
-              flipX={p.flip}
-              anchor={bottom ? 'bottom' : 'center'}
-              opacity={opacity}
-            />
-          )
-        })}
+        <Caustics frac={frac} />
+        <ParallaxBand items={bg} frac={frac} bandOpacity={bgOpacity} />
+        <ParallaxBand items={mid} frac={frac} bandOpacity={1} />
+        <ParallaxBand items={fg} frac={frac} bandOpacity={1} />
       </Suspense>
 
       {/* L3 reveal / L4 backdrop: the real 3D outflow pipe + surface dock. */}

@@ -40,6 +40,21 @@ function Actor({ def }: { def: ActorDef }) {
   const started = useRef(false)
   const bobPhase = useRef(Math.random() * Math.PI * 2)
 
+  // Native facing resolution. `def.flipX` is the correct flip when the actor
+  // faces TOWARD Reginald at rest; from that we recover the flip value that
+  // makes the sprite face RIGHT, regardless of the sheet's native direction.
+  // (home left of Reginald => Reginald is to the right => facing Reginald means
+  //  facing right, so def.flipX already IS flip-for-right; otherwise it's the
+  //  inverse.)
+  const flipForRight = useMemo(
+    () => (def.offset[0] < 0 ? def.flipX : !def.flipX),
+    [def],
+  )
+
+  // Live horizontal facing: start facing the way we swim in (toward the home slot).
+  const [facingRight, setFacingRight] = useState(def.offset[0] < 0)
+  const facingRef = useRef(facingRight)
+
   useFrame((state, raw) => {
     const g = groupRef.current
     if (!g) return
@@ -69,6 +84,15 @@ function Actor({ def }: { def: ActorDef }) {
       else ty = p[1] + OFF_Y
     }
 
+    // Face the direction of horizontal travel while swimming; once settled,
+    // turn to face Reginald. Only commit to state on an actual flip.
+    const vx = tx - base.current.x
+    const desiredRight = Math.abs(vx) > 0.05 ? vx > 0 : p[0] - base.current.x > 0
+    if (desiredRight !== facingRef.current) {
+      facingRef.current = desiredRight
+      setFacingRight(desiredRight)
+    }
+
     const t = 1 - Math.exp(-3.2 * delta)
     base.current.x = MathUtils.lerp(base.current.x, tx, t)
     base.current.y = MathUtils.lerp(base.current.y, ty, t)
@@ -89,7 +113,11 @@ function Actor({ def }: { def: ActorDef }) {
   return (
     <group ref={groupRef}>
       <Suspense fallback={null}>
-        <BillboardSprite url={SPRITES[def.key]} scale={def.scale} flipX={def.flipX} />
+        <BillboardSprite
+          url={SPRITES[def.key]}
+          scale={def.scale}
+          flipX={facingRight ? flipForRight : !flipForRight}
+        />
       </Suspense>
     </group>
   )
