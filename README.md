@@ -1,5 +1,7 @@
 # Catfish Chaos: HONK!
 
+**▶ Play it: https://catfish-chaos-honk.vercel.app/**
+
 You are Sir Reginald, a top-hatted gentleman catfish and the Don of a river district.
 The fish here fear you and love you in about equal measure. You have done ugly things to
 hold this stretch of water, and you would do them again, but the fish are yours and nobody
