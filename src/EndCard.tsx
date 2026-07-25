@@ -3,19 +3,10 @@ import { SPRITES } from './sprites'
 
 const ENDING_LINE = 'The water is clean. Do not mistake that for mercy.'
 
-/** Things a player can actually do — kept short, concrete, attributed. */
-const ACTIONS = [
-  'Fix a dripping tap — one drip a second wastes ~7,900 litres a year.',
-  'Cut one minute off your shower — about 280 litres saved a month.',
-  'Run the dishwasher and washing machine only on full loads.',
-  'Turn the tap off while you brush.',
-]
-
 /**
  * Ending — "gentleman's salvage" pixel-art card matching the HUD/LevelCard.
- * After the story stat, two earned beats: the water cost of the AI/data centres
- * (on-theme — this game was AI-built), then what the player can actually do.
- * Tall content scrolls within the card so it always fits.
+ * After the story stat, the water cost of the AI/data centres that build games
+ * like this one. Tall content scrolls within the card so it always fits.
  */
 export function EndCard() {
   const reset = useGame((s) => s.reset)
@@ -51,19 +42,6 @@ export function EndCard() {
           </p>
           <p style={factSource}>— EESI · Environmental Law Institute (2024)</p>
           <p style={kicker}>This game was built with AI. The river keeps that receipt too.</p>
-        </div>
-
-        <div style={factPanel}>
-          <p style={factEyebrow}>What you can do</p>
-          <ul style={actionList}>
-            {ACTIONS.map((a) => (
-              <li key={a} style={actionItem}>
-                <img src={SPRITES.bubbleFull} alt="" style={actionBullet} />
-                <span>{a}</span>
-              </li>
-            ))}
-          </ul>
-          <p style={factSource}>— US EPA WaterSense · Alliance for Water Efficiency</p>
         </div>
 
         <button
@@ -203,22 +181,6 @@ const kicker: React.CSSProperties = {
   color: '#ffd9a6',
   opacity: 0.9,
   margin: '10px 0 0',
-}
-const actionList: React.CSSProperties = { listStyle: 'none', margin: 0, padding: 0 }
-const actionItem: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 8,
-  fontSize: 13,
-  lineHeight: 1.45,
-  padding: '4px 0',
-}
-const actionBullet: React.CSSProperties = {
-  width: 14,
-  height: 14,
-  marginTop: 2,
-  flexShrink: 0,
-  imageRendering: 'pixelated',
 }
 const playBtn: React.CSSProperties = {
   cursor: 'pointer',
