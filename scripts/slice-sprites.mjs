@@ -219,21 +219,25 @@ function drumSvg() {
 </svg>`;
 }
 
-// An outflow valve: a grimy pipe stub topped with a red spoked hand-wheel.
+// An outflow valve: a rusty steel pipe stub topped with a rusty spoked hand-wheel.
+// Palette matches PipeDock's metal (#6d5c46), dark steel (#3f3427) and rust (#8a4a24).
 function valveSvg() {
   return `<?xml version="1.0"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="72" viewBox="0 0 64 72" shape-rendering="crispEdges">
-  <rect x="24" y="40" width="16" height="28" fill="#4a4f55"/>
-  <rect x="20" y="60" width="24" height="8" fill="#3a3f45"/>
-  <rect x="28" y="30" width="8" height="14" fill="#5a5f66"/>
-  <circle cx="32" cy="24" r="20" fill="none" stroke="#c0392b" stroke-width="6"/>
-  <g stroke="#c0392b" stroke-width="5">
+  <rect x="24" y="40" width="16" height="28" fill="#6d5c46"/>
+  <rect x="24" y="40" width="4" height="28" fill="#8a6f52" opacity="0.6"/>
+  <rect x="20" y="60" width="24" height="8" fill="#3f3427"/>
+  <rect x="20" y="48" width="24" height="4" fill="#8a4a24"/>
+  <rect x="28" y="30" width="8" height="14" fill="#5a4d3a"/>
+  <circle cx="32" cy="24" r="20" fill="none" stroke="#4a3f2e" stroke-width="6"/>
+  <circle cx="32" cy="24" r="20" fill="none" stroke="#8a4a24" stroke-width="2" opacity="0.7"/>
+  <g stroke="#5a4d3a" stroke-width="5">
     <line x1="32" y1="6" x2="32" y2="42"/>
     <line x1="14" y1="24" x2="50" y2="24"/>
     <line x1="19" y1="11" x2="45" y2="37"/>
     <line x1="45" y1="11" x2="19" y2="37"/>
   </g>
-  <circle cx="32" cy="24" r="5" fill="#7a241b"/>
+  <circle cx="32" cy="24" r="5" fill="#8a4a24"/>
 </svg>`;
 }
 
@@ -638,7 +642,13 @@ async function main() {
   // consistent direction; Boss.tsx flips as needed). Regions tuned to exclude
   // the sheet's $ / rock / bubble decorations.
   const scuba = await loadCleanSheet('vitale-sheet.png');
-  await slice(scuba, 'vitaleScubaStand', [78, 22, 112, 232]);
+  // Standing Vitale: a clean, full-body sprite (its own image) — replaces the
+  // cramped sheet crop that was getting clipped in-game.
+  const standSheet = await loadCleanSheet('vitale-stand.png');
+  await slice(standSheet, 'vitaleScubaStand', [0, 0, standSheet.width, standSheet.height]);
+  // Defeated Vitale: limp, X-eyed, floating on his side (its own image).
+  const deadSheet = await loadCleanSheet('vitale-dead.png');
+  await slice(deadSheet, 'vitaleDead', [0, 0, deadSheet.width, deadSheet.height]);
   // Swim frames: extract, drop neighbour specks, then centre each onto ONE
   // uniform canvas (max bbox across the three) so the animated BillboardSprite
   // never resizes/clips per frame. All face RIGHT — Boss.tsx flips as needed.

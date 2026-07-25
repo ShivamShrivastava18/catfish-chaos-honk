@@ -199,12 +199,12 @@ export function Boss() {
     if (grp) {
       grp.visible = state.gamePhase === 'playing' || state.gamePhase === 'outro'
       if (defeated) {
-        // Beaten: stop swimming. Go limp and sink slowly while the outro plays.
+        // Beaten: stop swimming (the dead sprite is already limp). Drift down slowly
+        // with a faint sway while the outro plays.
         bossVel.current.set(0, 0, 0)
-        bossBase.current.y -= 0.9 * delta
-        bossPos.current.set(bossBase.current.x, bossBase.current.y, 0)
+        bossBase.current.y -= 0.5 * delta
+        bossPos.current.set(bossBase.current.x + Math.sin(now * 1.2) * 0.1, bossBase.current.y, 0)
         grp.position.copy(bossPos.current)
-        grp.rotation.z = MathUtils.lerp(grp.rotation.z, -0.5, 1 - Math.exp(-3 * delta))
       } else {
         // Wander toward the current waypoint.
         const toWp = bossWaypoint.current.clone().sub(bossBase.current)
@@ -471,15 +471,15 @@ export function Boss() {
 
   return (
     <>
-      {/* Don Vitale — mobile scuba diver, with a hit flash + health pips riding along */}
+      {/* Don Vitale — mobile scuba diver, with a hit flash + health pips riding along.
+          Once beaten he becomes the limp, X-eyed dead sprite. */}
       <group ref={bossGroup} position={[0, 6, 0]}>
         <Suspense fallback={null}>
-          <BillboardSprite
-            frames={SCUBA_URLS}
-            fps={6}
-            scale={BOSS_SCALE}
-            flipX={!bossFlip}
-          />
+          {objectiveIndex >= 3 ? (
+            <BillboardSprite url={SPRITES.vitaleDead} scale={BOSS_SCALE * 1.15} />
+          ) : (
+            <BillboardSprite frames={SCUBA_URLS} fps={6} scale={BOSS_SCALE} flipX={!bossFlip} />
+          )}
         </Suspense>
 
         {/* Hit flash over Vitale */}

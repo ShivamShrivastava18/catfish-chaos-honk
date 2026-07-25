@@ -48,6 +48,7 @@ export const SPRITES = {
   // Boss v3 — Don Vitale: fedora persona portrait + underwater SCUBA frames.
   vitalePersona: '/sprites/vitalePersona.png',
   vitaleScubaStand: '/sprites/vitaleScubaStand.png',
+  vitaleDead: '/sprites/vitaleDead.png',
   vitaleScuba1: '/sprites/vitaleScuba1.png',
   vitaleScuba2: '/sprites/vitaleScuba2.png',
   vitaleScuba3: '/sprites/vitaleScuba3.png',

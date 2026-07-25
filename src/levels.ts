@@ -453,7 +453,7 @@ const LEVEL_3: Level = {
     {
       id: 'l3-jam-valve',
       kind: 'clear',
-      pos: [5, -0.6, 0],
+      pos: [8.4, -1, 0.1],
       sprite: 'valve',
       label: 'Wrench the outflow valve',
       hint: 'Swim to the valve and press SPACE to wrench it shut',
