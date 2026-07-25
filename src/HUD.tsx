@@ -3,7 +3,6 @@ import { useGame } from './store'
 export function HUD() {
   const crimes = useGame((s) => s.crimes)
   const health = useGame((s) => s.riverHealth)
-  const complete = useGame((s) => s.completeCrime)
 
   return (
     <div style={overlay}>
@@ -14,7 +13,6 @@ export function HUD() {
           {crimes.map((c) => (
             <li
               key={c.id}
-              onClick={() => complete(c.id)}
               style={{ ...crimeRow, opacity: c.done ? 0.45 : 1, textDecoration: c.done ? 'line-through' : 'none' }}
             >
               {c.done ? '☑' : '☐'} {c.label}
@@ -27,7 +25,7 @@ export function HUD() {
             <div style={{ ...barFill, width: `${health}%` }} />
           </div>
         </div>
-        <p style={hint}>(temporary: click a crime to complete it)</p>
+        <p style={hint}>WASD swim · SPACE / E grab & drop · H honk</p>
       </div>
     </div>
   )
@@ -52,7 +50,7 @@ const panel: React.CSSProperties = {
 }
 const title: React.CSSProperties = { fontSize: 22, fontWeight: 800, letterSpacing: 0.5 }
 const subtitle: React.CSSProperties = { fontSize: 13, opacity: 0.8, marginBottom: 10 }
-const crimeRow: React.CSSProperties = { padding: '6px 0', cursor: 'pointer', fontSize: 14 }
+const crimeRow: React.CSSProperties = { padding: '6px 0', fontSize: 14 }
 const barTrack: React.CSSProperties = {
   height: 10,
   background: 'rgba(255,255,255,0.15)',

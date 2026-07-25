@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/hud.tsx","./src/scene.tsx","./src/main.tsx","./src/store.ts"],"version":"5.9.3"}
+{"root":["./src/ambientlife.tsx","./src/app.tsx","./src/audiocontroller.tsx","./src/billboardsprite.tsx","./src/endcard.tsx","./src/grabbables.tsx","./src/hud.tsx","./src/juice.tsx","./src/player.tsx","./src/scene.tsx","./src/speechbubble.tsx","./src/titlescreen.tsx","./src/contracts.ts","./src/crimeobjects.ts","./src/main.tsx","./src/sprites.ts","./src/store.ts","./src/useaudio.ts"],"version":"5.9.3"}

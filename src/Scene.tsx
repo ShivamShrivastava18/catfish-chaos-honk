@@ -1,8 +1,11 @@
-import { useRef, useMemo } from 'react'
+import { Suspense, useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Points, PointMaterial } from '@react-three/drei'
 import { Color, Fog, type Points as ThreePoints } from 'three'
 import { useGame, waterColor } from './store'
+import { Player } from './Player'
+import { Grabbables } from './Grabbables'
+import { AmbientLife } from './AmbientLife'
 
 /** Drifting bubbles / marine snow. */
 function Particles({ count = 400 }: { count?: number }) {
@@ -65,13 +68,13 @@ export function Scene() {
         <meshStandardMaterial color="#243b2f" roughness={1} />
       </mesh>
 
-      {/* Placeholder for Sir Reginald until the sprite sheet is sliced */}
-      <mesh position={[0, 2, 0]}>
-        <boxGeometry args={[2, 1, 0.6]} />
-        <meshStandardMaterial color="#5a8f4a" emissive="#213d1a" />
-      </mesh>
-
       <Particles />
+      <AmbientLife />
+
+      <Suspense fallback={null}>
+        <Player />
+        <Grabbables />
+      </Suspense>
     </>
   )
 }
