@@ -1,5 +1,7 @@
-import { useGame, ENDING_LINE } from './store'
+import { useGame } from './store'
 import { SPRITES } from './sprites'
+
+const ENDING_LINE = 'The water is clean. Do not mistake that for mercy.'
 
 export function EndCard() {
   const reset = useGame((s) => s.reset)

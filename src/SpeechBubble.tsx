@@ -13,7 +13,7 @@ export function SpeechBubble() {
 
   useEffect(() => {
     if (currentLine) {
-      setDisplayLine(currentLine)
+      setDisplayLine(currentLine.text)
       const id = requestAnimationFrame(() => setVisible(true))
       return () => cancelAnimationFrame(id)
     }

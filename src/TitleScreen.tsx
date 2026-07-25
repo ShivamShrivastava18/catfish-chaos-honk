@@ -10,10 +10,11 @@ export function TitleScreen() {
       <div style={card}>
         <img src={SPRITES.reginaldFront} alt="Sir Reginald" style={hero} />
         <h1 style={title}>Catfish Chaos: HONK!</h1>
-        <p style={subtitle}>A honk-able adventure</p>
+        <p style={subtitle}>The Don of the River</p>
         <p style={premise}>
-          Sir Reginald, a top-hatted gentleman catfish, takes petty revenge on a
-          polluting riverside town. Every crime cleans the river a little more.
+          Sir Reginald runs this stretch of river — feared, loved, and not to be
+          crossed. His fish bring him their troubles, and he makes them disappear.
+          But every problem traces back to the same rot upstream: the Land Mafia.
         </p>
         <button
           style={startBtn}
@@ -23,7 +24,7 @@ export function TitleScreen() {
         >
           START
         </button>
-        <p style={controls}>WASD swim · SPACE grab · H honk</p>
+        <p style={controls}>WASD swim · SPACE grab / drop · H honk · SPACE advance dialogue</p>
       </div>
     </div>
   )

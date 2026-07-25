@@ -1,95 +1,147 @@
 import { create } from 'zustand'
 import { Color } from 'three'
+import { LEVELS } from './levels'
+import { HONK_LINE, reginaldBark, ENDING_STAT, ENDING_SOURCE, type DialogueLine } from './story'
 
-export interface Crime {
-  id: string
-  label: string
-  done: boolean
-}
+export { ENDING_STAT, ENDING_SOURCE }
+export type { DialogueLine }
 
-const INITIAL_CRIMES: Crime[] = [
-  { id: 'barrels', label: 'Return the toxic barrels to the boss’s lawn', done: false },
-  { id: 'pipe', label: 'Yank the outflow pipe loose', done: false },
-  { id: 'boat', label: 'Capsize the poacher’s boat', done: false },
-  { id: 'sign', label: 'Steal the CONDOS sign', done: false },
-  { id: 'toupee', label: 'Snatch the mayor’s toupee', done: false },
-]
+/**
+ * gamePhase drives the whole game loop:
+ *   title    -> startGame()      -> intro (level 0)
+ *   intro    -> advanceDialogue()-> ... -> startPlaying()  (auto at end of intro)
+ *   playing  -> completeObjective() x N -> outro           (auto when all done)
+ *   outro    -> advanceDialogue()-> ... -> levelclear       (auto at end of outro)
+ *   levelclear -> nextLevel()    -> intro (next level) OR won (after L4)
+ */
+export type GamePhase = 'title' | 'intro' | 'playing' | 'outro' | 'levelclear' | 'won'
 
-/** Exact spec dialogue barks, keyed by crime id. */
-export const CRIME_DIALOGUE: Record<string, string> = {
-  barrels: 'You dropped these. On my carpet.',
-  pipe: 'Plumbing is a privilege, not a right.',
-  boat: 'A gentleman always sees his guests out.',
-  sign: "'Coming soon.' How optimistic.",
-  toupee: "I'll be needing that.",
-}
-
-/** Line shown on the ending card once the river is clean. */
-export const ENDING_LINE = 'Good day. The river thanks you. I do not.'
-
-export type GamePhase = 'title' | 'playing' | 'won'
-
-const SAY_DURATION = 2500
+const SAY_DURATION = 2600
 let sayTimer: ReturnType<typeof setTimeout> | null = null
 
-interface GameState {
-  crimes: Crime[]
-  riverHealth: number // 0 (sludge) .. 100 (clear)
-  gamePhase: GamePhase
-  currentLine: string | null
-  honkPulse: number
+function clearSayTimer() {
+  if (sayTimer) {
+    clearTimeout(sayTimer)
+    sayTimer = null
+  }
+}
 
-  completeCrime: (id: string) => void
-  reset: () => void
-  setGamePhase: (p: GamePhase) => void
+interface GameState {
+  gamePhase: GamePhase
+  levelIndex: number // 0..LEVELS.length-1
+  objectiveIndex: number // active objective within the current level
+  riverHealth: number // 0..100, per-level, driven by objectives completed
+  currentLine: DialogueLine | null // active speech line (typewriter target)
+  dialogue: DialogueLine[] // active intro/outro sequence
+  lineIndex: number // cursor into `dialogue`
+  honkPulse: number // increments on honk() — subscribe to react (shake/sfx)
+
   startGame: () => void
-  say: (line: string) => void
-  clearLine: () => void
+  beginLevel: (i: number) => void
+  startPlaying: () => void
+  completeObjective: (id: string) => void
+  nextLevel: () => void
+  advanceDialogue: () => void
+  say: (line: DialogueLine) => void
   honk: () => void
+  reset: () => void
+}
+
+const CLEAN_SLATE = {
+  gamePhase: 'title' as GamePhase,
+  levelIndex: 0,
+  objectiveIndex: 0,
+  riverHealth: 0,
+  currentLine: null as DialogueLine | null,
+  dialogue: [] as DialogueLine[],
+  lineIndex: 0,
+  honkPulse: 0,
 }
 
 export const useGame = create<GameState>((set, get) => ({
-  crimes: INITIAL_CRIMES.map((c) => ({ ...c })),
-  riverHealth: 0,
-  gamePhase: 'title',
-  currentLine: null,
-  honkPulse: 0,
+  ...CLEAN_SLATE,
 
-  completeCrime: (id) => {
-    set((state) => {
-      const crimes = state.crimes.map((c) => (c.id === id ? { ...c, done: true } : c))
-      const doneCount = crimes.filter((c) => c.done).length
-      const allDone = doneCount === crimes.length
-      return {
-        crimes,
-        riverHealth: Math.round((doneCount / crimes.length) * 100),
-        gamePhase: allDone ? ('won' as GamePhase) : state.gamePhase,
-      }
-    })
-    const line = CRIME_DIALOGUE[id]
-    if (line) get().say(line)
-  },
+  startGame: () => get().beginLevel(0),
 
-  reset: () => {
-    if (sayTimer) {
-      clearTimeout(sayTimer)
-      sayTimer = null
-    }
+  beginLevel: (i) => {
+    clearSayTimer()
+    const level = LEVELS[i]
+    const intro = level ? level.intro : []
     set({
-      crimes: INITIAL_CRIMES.map((c) => ({ ...c })),
+      gamePhase: 'intro',
+      levelIndex: i,
+      objectiveIndex: 0,
       riverHealth: 0,
-      gamePhase: 'title',
-      currentLine: null,
-      honkPulse: 0,
+      dialogue: intro,
+      lineIndex: 0,
+      currentLine: intro.length > 0 ? intro[0] : null,
     })
   },
 
-  setGamePhase: (p) => set({ gamePhase: p }),
+  startPlaying: () => {
+    clearSayTimer()
+    set({ gamePhase: 'playing', dialogue: [], lineIndex: 0, currentLine: null })
+  },
 
-  startGame: () => set({ gamePhase: 'playing' }),
+  completeObjective: (id) => {
+    const { gamePhase, levelIndex, objectiveIndex } = get()
+    if (gamePhase !== 'playing') return
+    const level = LEVELS[levelIndex]
+    if (!level) return
+    const active = level.objectives[objectiveIndex]
+    // Only the active breadcrumb objective is completable.
+    if (!active || active.id !== id) return
+
+    const nextIndex = objectiveIndex + 1
+    const total = level.objectives.length
+    const riverHealth = Math.round((nextIndex / total) * 100)
+
+    if (nextIndex >= total) {
+      // Level solved — roll straight into the outro sequence.
+      clearSayTimer()
+      set({
+        objectiveIndex: nextIndex,
+        riverHealth,
+        gamePhase: 'outro',
+        dialogue: level.outro,
+        lineIndex: 0,
+        currentLine: level.outro.length > 0 ? level.outro[0] : null,
+      })
+    } else {
+      set({ objectiveIndex: nextIndex, riverHealth })
+      if (active.doneLine) get().say(reginaldBark(active.doneLine))
+    }
+  },
+
+  nextLevel: () => {
+    const { levelIndex } = get()
+    const next = levelIndex + 1
+    if (next < LEVELS.length) {
+      get().beginLevel(next)
+    } else {
+      clearSayTimer()
+      set({ gamePhase: 'won', currentLine: null, dialogue: [], lineIndex: 0 })
+    }
+  },
+
+  advanceDialogue: () => {
+    const { gamePhase, dialogue, lineIndex } = get()
+    if (gamePhase !== 'intro' && gamePhase !== 'outro') return
+    const next = lineIndex + 1
+    if (next < dialogue.length) {
+      set({ lineIndex: next, currentLine: dialogue[next] })
+      return
+    }
+    // End of the sequence — hand off to the next phase.
+    if (gamePhase === 'intro') {
+      get().startPlaying()
+    } else {
+      set({ gamePhase: 'levelclear', currentLine: null, dialogue: [], lineIndex: 0 })
+    }
+  },
 
   say: (line) => {
-    if (sayTimer) clearTimeout(sayTimer)
+    clearSayTimer()
     set({ currentLine: line })
     sayTimer = setTimeout(() => {
       sayTimer = null
@@ -97,17 +149,14 @@ export const useGame = create<GameState>((set, get) => ({
     }, SAY_DURATION)
   },
 
-  clearLine: () => {
-    if (sayTimer) {
-      clearTimeout(sayTimer)
-      sayTimer = null
-    }
-    set({ currentLine: null })
+  honk: () => {
+    set((s) => ({ honkPulse: s.honkPulse + 1 }))
+    get().say(HONK_LINE)
   },
 
-  honk: () => {
-    set((state) => ({ honkPulse: state.honkPulse + 1 }))
-    get().say('HONK.')
+  reset: () => {
+    clearSayTimer()
+    set({ ...CLEAN_SLATE })
   },
 }))
 

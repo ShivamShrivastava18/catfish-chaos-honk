@@ -1,10 +1,8 @@
-import { Suspense, useRef, useMemo } from 'react'
+import { useRef, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Points, PointMaterial } from '@react-three/drei'
 import { Color, Fog, type Points as ThreePoints } from 'three'
 import { useGame, waterColor } from './store'
-import { Player } from './Player'
-import { Grabbables } from './Grabbables'
 import { AmbientLife } from './AmbientLife'
 
 /** Drifting bubbles / marine snow. */
@@ -70,11 +68,6 @@ export function Scene() {
 
       <Particles />
       <AmbientLife />
-
-      <Suspense fallback={null}>
-        <Player />
-        <Grabbables />
-      </Suspense>
     </>
   )
 }
